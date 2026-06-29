@@ -1,0 +1,47 @@
+[Unit]
+Description=News Eagle Live — Telegram News Bot
+Documentation=https://github.com/your-org/news-eagle-live
+After=network-online.target mysql.service redis-server.service
+Wants=network-online.target mysql.service redis-server.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=eagle
+Group=eagle
+WorkingDirectory=/opt/news-eagle-live
+EnvironmentFile=/opt/news-eagle-live/.env
+ExecStart=/opt/news-eagle-live/.venv/bin/python /opt/news-eagle-live/run.py
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+# --- Logging ---
+StandardOutput=append:/opt/news-eagle-live/logs/stdout.log
+StandardError=append:/opt/news-eagle-live/logs/stderr.log
+
+# --- Hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/opt/news-eagle-live/logs
+LockPersonality=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+# --- Resource limits ---
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

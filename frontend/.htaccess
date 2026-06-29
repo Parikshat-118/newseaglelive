@@ -1,0 +1,14 @@
+# News Eagle Live web app
+Options -Indexes
+DirectoryIndex index.php
+
+# Backward-compat: old links that still carry the /newseagle/ prefix
+# (e.g. already shared on Telegram) -> redirect to the same file at root.
+RewriteEngine On
+RewriteRule ^newseagle/?$    /        [R=301,L]
+RewriteRule ^newseagle/(.*)$ /$1      [R=301,L]
+
+# Block direct access to includes
+<FilesMatch "^(bootstrap|config|header|footer)\.php$">
+  Require all denied
+</FilesMatch>

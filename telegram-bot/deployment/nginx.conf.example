@@ -1,0 +1,67 @@
+# =====================================================================
+# nginx reverse proxy for News Eagle Live (webhook mode)
+# Place in: /etc/nginx/sites-available/news-eagle
+# Symlink:  /etc/nginx/sites-enabled/news-eagle
+# After installing, run `sudo certbot --nginx -d news.yourdomain.com`
+# which will rewrite this file to add the TLS listener.
+# =====================================================================
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name news.yourdomain.com;
+
+    # certbot challenge passthrough (Let's Encrypt webroot)
+    location /.well-known/acme-challenge/ { allow all; }
+
+    # Until TLS is set up, redirect everything to HTTPS (certbot adds this automatically too)
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name news.yourdomain.com;
+
+    # certbot will populate these two lines:
+    # ssl_certificate     /etc/letsencrypt/live/news.yourdomain.com/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/news.yourdomain.com/privkey.pem;
+
+    # Reasonable TLS defaults
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    client_max_body_size 50M;
+
+    # ----- Telegram webhook -----
+    location = /telegram/webhook {
+        proxy_pass         http://127.0.0.1:8443/telegram/webhook;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
+    # ----- Healthcheck (optional) -----
+    location = /healthz {
+        return 200 "ok\n";
+        add_header Content-Type text/plain;
+    }
+
+    # ----- Default deny -----
+    location / {
+        return 404;
+    }
+}

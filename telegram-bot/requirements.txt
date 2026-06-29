@@ -1,0 +1,44 @@
+# Core bot
+python-telegram-bot[job-queue]==22.0
+
+# Database
+SQLAlchemy>=2.0.40
+PyMySQL==1.1.1
+cryptography==43.0.3       # required by PyMySQL for caching_sha2_password
+alembic==1.13.3            # migrations
+
+# Cache / Redis
+redis==5.2.0
+hiredis==3.0.0
+
+# Async HTTP
+httpx==0.27.2
+aiohttp==3.10.10
+
+# Config / validation
+pydantic>=2.10
+pydantic-settings>=2.7
+python-dotenv==1.0.1
+
+# Scheduler
+APScheduler==3.10.4
+
+# News sources
+feedparser==6.0.11         # RSS
+beautifulsoup4==4.12.3
+lxml>=5.4
+
+# AI / OpenRouter (we use httpx directly, but tiktoken helps with token budgeting)
+
+# Utilities
+python-dateutil==2.9.0.post0
+pytz==2024.2
+tenacity==9.0.0            # retry/backoff
+
+# Logging
+loguru==0.7.2
+
+# Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0

@@ -1,0 +1,52 @@
+# =====================================================================
+# Apache reverse proxy for News Eagle Live (LAMP-friendly alternative).
+# Place in: /etc/apache2/sites-available/news-eagle.conf
+# Enable:   sudo a2ensite news-eagle && sudo a2enmod proxy proxy_http ssl headers rewrite
+#           sudo systemctl reload apache2
+# Then:     sudo certbot --apache -d news.yourdomain.com
+# =====================================================================
+
+<VirtualHost *:80>
+    ServerName news.yourdomain.com
+    # Pass ACME challenges, redirect everything else to HTTPS
+    DocumentRoot /var/www/html
+    Alias /.well-known/acme-challenge/ /var/www/html/.well-known/acme-challenge/
+    RewriteEngine On
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^/?(.*)$ https://%{SERVER_NAME}/$1 [R=301,L]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName news.yourdomain.com
+
+    # certbot will populate these two lines
+    # SSLCertificateFile      /etc/letsencrypt/live/news.yourdomain.com/fullchain.pem
+    # SSLCertificateKeyFile   /etc/letsencrypt/live/news.yourdomain.com/privkey.pem
+
+    SSLEngine on
+    SSLProtocol             all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+    SSLHonorCipherOrder     off
+
+    Header always set Strict-Transport-Security "max-age=63072000"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+
+    # ----- Telegram webhook -----
+    ProxyPreserveHost On
+    ProxyRequests Off
+    <Location /telegram/webhook>
+        ProxyPass         http://127.0.0.1:8443/telegram/webhook
+        ProxyPassReverse  http://127.0.0.1:8443/telegram/webhook
+        RequestHeader set X-Forwarded-Proto "https"
+    </Location>
+
+    # ----- Healthcheck -----
+    <Location /healthz>
+        SetHandler default-handler
+        Header set Content-Type "text/plain"
+    </Location>
+
+    ErrorLog ${APACHE_LOG_DIR}/news-eagle-error.log
+    CustomLog ${APACHE_LOG_DIR}/news-eagle-access.log combined
+</VirtualHost>
