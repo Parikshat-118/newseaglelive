@@ -1,0 +1,74 @@
+services:
+
+  web:
+    build:
+      context: .
+      dockerfile: php/Dockerfile
+
+    container_name: newseagle-web
+
+    env_file:
+      - .env
+
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: news_eagle
+      DB_USER: root
+      DB_PASS: root
+
+    ports:
+      - "${WEB_PORT}:80"
+
+    volumes:
+      - ../frontend:/var/www/html
+
+    depends_on:
+      - mysql
+
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+
+    container_name: newseagle-mysql
+
+    env_file:
+      - .env
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    ports:
+      - "${MYSQL_PORT}:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+
+    container_name: newseagle-phpmyadmin
+
+    depends_on:
+      - mysql
+
+    env_file:
+      - .env
+
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+
+    ports:
+      - "${PHPMYADMIN_PORT}:80"
+
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
