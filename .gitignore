@@ -98,3 +98,8 @@ frontend/includes/config.php
 telegram-bot/.env
 telegram-bot/install-ready.sh
 telegram-bot/install.sh
+
+#################################################
+# Docker
+#################################################
+docker/.env
