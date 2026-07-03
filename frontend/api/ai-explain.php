@@ -1,7 +1,7 @@
 <?php
 /**
- * POST /api/ai-explain.php  { article_id: 123 }
- * AI summary (EN + HI), generated once via OpenRouter, cached in DB.
+ * POST /api/ai-explain.php  { article_id: 123, lang: "en"|"hi"|"bn"|"mr"|"ta" }
+ * AI explanation in the requested language, generated once via OpenRouter, cached in DB.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
@@ -15,6 +15,7 @@ if (!function_exists('curl_init')) {
 
 $body = json_decode(file_get_contents('php://input') ?: '', true) ?: [];
 $aid = (int)($body['article_id'] ?? 0);
+$lang = strtolower((string)($body['lang'] ?? 'en'));
 if ($aid <= 0) ne_json(['ok'=>false,'error'=>'bad_id'], 400);
 
 $db = ne_db();
@@ -22,25 +23,64 @@ if (!$db) ne_json(['ok'=>false,'error'=>'db'], 500);
 
 global $CONFIG;
 
+// ── Language config ──────────────────────────────────────────────────
+$langCols = [
+    'en' => 'ai_summary',
+    'hi' => 'ai_summary_hi',
+    'bn' => 'ai_summary_bn',
+    'mr' => 'ai_summary_mr',
+    'ta' => 'ai_summary_ta',
+];
+$langNames = [
+    'en' => 'English',
+    'hi' => 'Hindi',
+    'bn' => 'Bengali',
+    'mr' => 'Marathi',
+    'ta' => 'Tamil',
+];
+
+// Validate language
+if (!isset($langCols[$lang])) {
+    $lang = 'en';
+}
+$col = $langCols[$lang];
+$targetLangName = $langNames[$lang];
+
 try {
-    $stmt = $db->prepare("SELECT id, title, summary, content, ai_summary, ai_summary_hi FROM news_articles WHERE id = :a");
+    $stmt = $db->prepare(
+        "SELECT id, title, summary, content, ai_summary, ai_summary_hi,
+                ai_summary_bn, ai_summary_mr, ai_summary_ta
+         FROM news_articles WHERE id = :a"
+    );
     $stmt->execute([':a'=>$aid]);
     $art = $stmt->fetch();
     if (!$art) ne_json(['ok'=>false,'error'=>'not_found'], 404);
 
-    if (!empty($art['ai_summary'])) {
-        ne_json(['ok'=>true,'cached'=>true,'summary_en'=>$art['ai_summary'],'summary_hi'=>$art['ai_summary_hi'] ?? '']);
+    // ── Return cached summary if available ───────────────────────────
+    if (!empty($art[$col])) {
+        ne_json(['ok'=>true,'cached'=>true,'summary'=>$art[$col]]);
     }
 
     $key = $CONFIG['openrouter']['key'] ?? '';
     if (!$key) ne_json(['ok'=>false,'error'=>'no_key'], 500);
 
-    $newsText = mb_substr(($art['title'] ?? '') . "\n\n" . ($art['content'] ?: $art['summary'] ?: ''), 0, 6000);
+    // ── Build prompt ─────────────────────────────────────────────────
+    $newsText = mb_substr(
+        ($art['title'] ?? '') . "\n\n" . ($art['content'] ?: $art['summary'] ?: ''),
+        0, 6000
+    );
+
     $userPrompt =
-        "Summarize this Indian news article for a busy reader.\n"
-        . "Reply with ONLY valid JSON, no markdown, exactly: "
-        . '{"summary_en":"• point 1\n• point 2\n• point 3\n• point 4\n• point 5\n\nWhy it matters: one line",'
-        . '"summary_hi":"<same content in Hindi>"}'
+        "You are a skilled news analyst. Provide a detailed, expanded summary and explanation of "
+        . "this news article for a busy reader.\n\n"
+        . "Your response MUST be written entirely in {$targetLangName}.\n\n"
+        . "Include the following sections:\n"
+        . "1. Key facts (bullet points covering who, what, when, where)\n"
+        . "2. Background context (explain the broader situation)\n"
+        . "3. Why it matters (impact and significance)\n"
+        . "4. What to watch next (future implications)\n\n"
+        . "Reply with ONLY valid JSON, no markdown fences, exactly:\n"
+        . '{"summary":"<your detailed explanation in ' . $targetLangName . '>"}'
         . "\n\nARTICLE:\n" . $newsText;
 
     $models = [
@@ -48,16 +88,16 @@ try {
         'x-ai/grok-4',
     ];
 
-    $en = ''; $hi = ''; $lastErr = '';
+    $summary = ''; $lastErr = '';
     foreach ($models as $model) {
         $payload = json_encode([
             'model' => $model,
             'messages' => [
-                ['role'=>'system','content'=>'You output only raw JSON. Never use markdown fences.'],
+                ['role'=>'system','content'=>'You output only raw JSON. Never use markdown fences. Always respond in the language requested by the user.'],
                 ['role'=>'user','content'=>$userPrompt],
             ],
             'temperature' => 0.3,
-            'max_tokens' => 900,
+            'max_tokens' => 1500,
         ]);
 
         $ch = curl_init('https://openrouter.ai/api/v1/chat/completions');
@@ -95,26 +135,26 @@ try {
         }
         $parsed = json_decode(trim($content), true);
         if (is_array($parsed)) {
-            $en = trim((string)($parsed['summary_en'] ?? ''));
-            $hi = trim((string)($parsed['summary_hi'] ?? ''));
+            $summary = trim((string)($parsed['summary'] ?? ''));
         }
-        // Last-resort: use raw text as English summary
-        if ($en === '' && mb_strlen(trim($content)) > 40) {
-            $en = trim(strip_tags($content));
+        // Last-resort: use raw text as summary
+        if ($summary === '' && mb_strlen(trim($content)) > 40) {
+            $summary = trim(strip_tags($content));
         }
-        if ($en !== '') break;
+        if ($summary !== '') break;
         $lastErr = 'parse_failed';
     }
 
-    if ($en === '') {
-        error_log('[ai-explain] all models failed: ' . $lastErr);
+    if ($summary === '') {
+        error_log('[ai-explain] all models failed for lang=' . $lang . ': ' . $lastErr);
         ne_json(['ok'=>false,'error'=>'ai_failed','detail'=>$lastErr], 502);
     }
 
-    $db->prepare("UPDATE news_articles SET ai_summary = :en, ai_summary_hi = :hi WHERE id = :a")
-       ->execute([':en'=>$en, ':hi'=>$hi ?: null, ':a'=>$aid]);
+    // ── Cache summary in the correct column ──────────────────────────
+    $db->prepare("UPDATE news_articles SET `{$col}` = :summary WHERE id = :a")
+       ->execute([':summary'=>$summary, ':a'=>$aid]);
 
-    ne_json(['ok'=>true,'cached'=>false,'summary_en'=>$en,'summary_hi'=>$hi]);
+    ne_json(['ok'=>true,'cached'=>false,'summary'=>$summary]);
 } catch (Throwable $e) {
     error_log('[ai-explain] ' . $e->getMessage());
     ne_json(['ok'=>false,'error'=>'server'], 500);

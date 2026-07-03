@@ -94,9 +94,18 @@ include __DIR__ . '/includes/header.php';
         <svg viewBox="0 0 24 24" fill="<?= $userLiked ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         <span>Like</span> <span data-count><?= (int)$a['like_count'] ?></span>
       </button>
-      <button class="action-btn" id="ai-explain-btn" data-aid="<?= $id ?>" type="button" style="border-color:var(--highlight);color:var(--highlight)">
-        ✨ <span>Explain with AI</span>
-      </button>
+      <div style="display:inline-flex;align-items:center;gap:0.4rem">
+        <select id="ai-lang-select" class="action-btn" style="padding:0.35rem 0.5rem;height:auto;border-color:var(--highlight);color:var(--highlight);background:var(--surface);cursor:pointer;font-size:0.85rem;border-radius:8px">
+          <option value="en">English</option>
+          <option value="hi">हिन्दी (Hindi)</option>
+          <option value="bn">বাংলা (Bengali)</option>
+          <option value="mr">मराठी (Marathi)</option>
+          <option value="ta">தமிழ் (Tamil)</option>
+        </select>
+        <button class="action-btn" id="ai-explain-btn" data-aid="<?= $id ?>" type="button" style="border-color:var(--highlight);color:var(--highlight)">
+          ✨ <span>Explain with AI</span>
+        </button>
+      </div>
       <button class="action-btn" data-share="whatsapp" data-article-id="<?= $id ?>" data-share-url="<?= h($shareUrl) ?>" data-share-title="<?= h($a['title']) ?>" type="button">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413"/></svg>
         <span>WhatsApp</span>
@@ -112,18 +121,7 @@ include __DIR__ . '/includes/header.php';
     </div>
 
     <div class="article-content">
-      <?php if (!empty($a['ai_summary'])): ?>
-        <p><span class="ai-tag">AI Summary</span></p>
-        <?php foreach (preg_split('/\n+/', $a['ai_summary']) as $p): if (trim($p) === '') continue; ?>
-          <p><?= h($p) ?></p>
-        <?php endforeach; ?>
-        <?php if (!empty($a['ai_summary_hi'])): ?>
-          <p style="margin-top:1.5rem"><span class="ai-tag">हिन्दी</span></p>
-          <?php foreach (preg_split('/\n+/', $a['ai_summary_hi']) as $p): if (trim($p) === '') continue; ?>
-            <p class="deva"><?= h($p) ?></p>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      <?php elseif (!empty($a['summary'])): ?>
+      <?php if (!empty($a['summary'])): ?>
         <?php foreach (preg_split('/\n+/', $a['summary']) as $p): if (trim($p) === '') continue; ?>
           <p><?= h($p) ?></p>
         <?php endforeach; ?>
@@ -142,36 +140,48 @@ include __DIR__ . '/includes/header.php';
     <div id="ai-explain-box" style="display:none;margin-top:1.5rem;padding:1.25rem;background:var(--surface);border:1px solid var(--highlight);border-radius:14px">
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
         <span class="ai-tag" style="background:var(--highlight);color:#000">✨ AI EXPLANATION</span>
+        <span id="ai-explain-lang-label" style="font-size:0.8rem;color:var(--text-soft);margin-left:auto"></span>
       </div>
-      <div id="ai-explain-en" style="color:var(--text-soft);white-space:pre-line"></div>
-      <div id="ai-explain-hi" class="deva" style="color:var(--text-soft);white-space:pre-line;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border-soft)"></div>
+      <div id="ai-explain-result" style="color:var(--text-soft);white-space:pre-line;line-height:1.7"></div>
     </div>
 
     <script>
     (function(){
       var btn = document.getElementById('ai-explain-btn');
-      if (!btn) return;
+      var langSelect = document.getElementById('ai-lang-select');
+      if (!btn || !langSelect) return;
+
+      var langLabels = {en:'English',hi:'हिन्दी',bn:'বাংলা',mr:'मराठी',ta:'தமிழ்'};
+
       btn.addEventListener('click', function(){
-        btn.disabled = true; btn.querySelector('span').textContent = 'Thinking…';
+        btn.disabled = true;
+        langSelect.disabled = true;
+        btn.querySelector('span').textContent = 'Thinking…';
+        var selectedLang = langSelect.value;
+
         fetch('/api/ai-explain.php', {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ article_id: +btn.getAttribute('data-aid') })
+          body: JSON.stringify({ article_id: +btn.getAttribute('data-aid'), lang: selectedLang })
         }).then(function(r){return r.json();}).then(function(d){
           if (d.ok) {
-            document.getElementById('ai-explain-en').textContent = d.summary_en || '';
-            var hi = document.getElementById('ai-explain-hi');
-            if (d.summary_hi) { hi.textContent = d.summary_hi; hi.style.display='block'; } else { hi.style.display='none'; }
+            document.getElementById('ai-explain-result').textContent = d.summary || '';
+            document.getElementById('ai-explain-lang-label').textContent = langLabels[selectedLang] || selectedLang;
             document.getElementById('ai-explain-box').style.display = 'block';
-            btn.style.display = 'none';
+            document.getElementById('ai-explain-box').scrollIntoView({behavior:'smooth', block:'nearest'});
+            btn.querySelector('span').textContent = 'Explain with AI';
+            btn.disabled = false;
+            langSelect.disabled = false;
           } else {
             btn.querySelector('span').textContent = 'Try again';
             btn.disabled = false;
+            langSelect.disabled = false;
             if (d.error === 'php_curl_missing') alert('Server needs php-curl: ' + (d.hint||''));
             else if (d.detail) console.warn('AI explain failed:', d.error, d.detail);
           }
         }).catch(function(){
           btn.querySelector('span').textContent = 'Try again';
           btn.disabled = false;
+          langSelect.disabled = false;
         });
       });
     })();
