@@ -4,10 +4,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.cache/
 
 #################################################
 # Virtual Environments
@@ -22,12 +25,15 @@ env/
 .env
 .env.local
 .env.*.local
+telegram-bot/.env
+docker/.env
 
 #################################################
 # Logs
 #################################################
 logs/
 *.log
+telegram-bot/logs/
 
 #################################################
 # IDE
@@ -47,15 +53,21 @@ Thumbs.db
 #################################################
 .coverage
 htmlcov/
-dist/
 build/
+dist/
 
 #################################################
 # Database
 #################################################
-database/*.sql
 *.db
 *.sqlite
+*.sqlite3
+
+# Ignore local database dumps
+database/*.sql
+
+# Keep folder in Git
+!database/.gitkeep
 
 #################################################
 # Archives
@@ -65,12 +77,6 @@ database/*.sql
 *.tar.gz
 *.rar
 *.7z
-
-#################################################
-# Python Cache
-#################################################
-.pytest_cache/
-.cache/
 
 #################################################
 # Temporary Files
@@ -84,22 +90,50 @@ database/*.sql
 frontend/vendor/
 
 #################################################
-# Node (if added later)
+# Node (Future)
 #################################################
 node_modules/
 
 #################################################
-# Runtime Files
+# Runtime
 #################################################
 *.pid
 *.pid.lock
-# Production secrets
-frontend/includes/config.php
-telegram-bot/.env
+
+#################################################
+# Local Installation Files
+#################################################
 telegram-bot/install-ready.sh
 telegram-bot/install.sh
 
 #################################################
 # Docker
 #################################################
+docker/mysql/data/
+docker/redis/data/
+
+#################################################
+# Local Docker Volumes
+#################################################
+mysql_data/
+redis_data/
+
+#################################################
+# VS Code Testing
+#################################################
+.history/
+
+#################################################
+# GitHub
+#################################################
+.github/*.secret
+
+#################################################
+# Production Secrets
+#################################################
+frontend/includes/config.php
+telegram-bot/.env
 docker/.env
+
+telegram-bot/install-ready.sh
+telegram-bot/install.sh

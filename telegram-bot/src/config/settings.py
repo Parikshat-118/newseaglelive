@@ -40,14 +40,15 @@ class Settings(BaseSettings):
     redis_prefix: str = "eagle:"
 
     # --- AI / OpenRouter ---
-    openrouter_api_key: str
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    ai_primary_model: str = "x-ai/grok-4-fast"
-    ai_fallback_model: str = "x-ai/grok-2-1212"
+    # --- AI / Groq ---
+    groq_api_key: str
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+
+    ai_primary_model: str = "llama-3.3-70b-versatile"
+    ai_fallback_model: str = "llama-3.1-8b-instant"
+
     ai_request_timeout: int = 45
     ai_max_tokens: int = 1024
-    openrouter_site_url: str = "https://newseagle.live"
-    openrouter_app_name: str = "News Eagle Live"
 
     # --- News sources ---
     newsapi_key: Optional[str] = None

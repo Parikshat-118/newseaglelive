@@ -1,44 +1,57 @@
-# Core bot
-python-telegram-bot[job-queue]==22.0
-
-# Database
-SQLAlchemy>=2.0.40
-PyMySQL==1.1.1
-cryptography==43.0.3       # required by PyMySQL for caching_sha2_password
-alembic==1.13.3            # migrations
-
-# Cache / Redis
-redis==5.2.0
-hiredis==3.0.0
-
-# Async HTTP
-httpx==0.27.2
+aiohappyeyeballs==2.6.2
 aiohttp==3.10.10
-
-# Config / validation
-pydantic>=2.10
-pydantic-settings>=2.7
-python-dotenv==1.0.1
-
-# Scheduler
+aiolimiter==1.2.1
+aiosignal==1.4.0
+alembic==1.13.3
+annotated-types==0.7.0
+anyio==4.14.1
 APScheduler==3.10.4
-
-# News sources
-feedparser==6.0.11         # RSS
+attrs==26.1.0
 beautifulsoup4==4.12.3
-lxml>=5.4
-
-# AI / OpenRouter (we use httpx directly, but tiktoken helps with token budgeting)
-
-# Utilities
-python-dateutil==2.9.0.post0
-pytz==2024.2
-tenacity==9.0.0            # retry/backoff
-
-# Logging
+certifi==2026.6.17
+cffi==2.0.0
+cryptography==43.0.3
+distro==1.9.0
+feedparser==6.0.11
+frozenlist==1.8.0
+greenlet==3.5.2
+h11==0.16.0
+hiredis==3.0.0
+httpcore==1.0.9
+httpx==0.27.2
+idna==3.18
+iniconfig==2.3.0
+jiter==0.16.0
 loguru==0.7.2
-
-# Testing
+lxml==6.1.1
+Mako==1.3.12
+MarkupSafe==3.0.3
+multidict==6.7.1
+openai==2.44.0
+packaging==26.2
+pluggy==1.6.0
+propcache==0.5.2
+pycparser==3.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+pydantic_core==2.46.4
+PyMySQL==1.1.1
 pytest==8.3.3
 pytest-asyncio==0.24.0
 pytest-mock==3.14.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.0.1
+python-telegram-bot==22.0
+pytz==2024.2
+redis==5.2.0
+sgmllib3k==1.0.0
+six==1.17.0
+sniffio==1.3.1
+soupsieve==2.8.4
+SQLAlchemy==2.0.51
+tenacity==9.0.0
+tqdm==4.68.3
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+tzlocal==5.4.3
+yarl==1.24.2

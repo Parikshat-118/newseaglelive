@@ -1,0 +1,123 @@
+
+
+services:
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+
+    container_name: newseagle-web
+
+    env_file:
+      - .env
+
+    ports:
+      - "${WEB_PORT}:80"
+
+    volumes:
+      - ./frontend:/var/www/html
+
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASS: ${MYSQL_PASSWORD}
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: docker/bot/Dockerfile
+
+    container_name: newseagle-bot
+
+    env_file:
+      - ./telegram-bot/.env
+
+    working_dir: /app
+
+    volumes:
+      - ./telegram-bot:/app
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+
+    container_name: newseagle-mysql
+
+    env_file:
+      - .env
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    ports:
+      - "${MYSQL_PORT}:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d
+
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+
+    container_name: newseagle-redis
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    command: redis-server --appendonly yes
+
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+
+    container_name: newseagle-phpmyadmin
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+
+    ports:
+      - "${PHPMYADMIN_PORT}:80"
+
+    restart: unless-stopped
+
+volumes:
+
+  mysql_data:
+
+  redis_data:
