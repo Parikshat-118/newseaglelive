@@ -215,7 +215,7 @@ These do not share code, data, or leaderboards — treat as two separate product
 
 **28 total objects** (26 tables + 2 views) — matches phpMyAdmin exactly.
 
----
+## Frontend
 
 ## 5. Feature map
 
