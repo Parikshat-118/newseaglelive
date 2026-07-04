@@ -1,7 +1,8 @@
 <?php
 /**
- * POST /api/ai-explain.php  { article_id: 123, lang: "en"|"hi"|"bn"|"mr"|"ta"|"te"|"kn"|"gu"|"ml"|"pa" }
- * AI explanation in the requested language, generated once via OpenRouter, cached in DB.
+ * POST /api/ai-explain.php  { article_id: 123, lang: "<language_code>" }
+ * AI explanation in any of 50 world languages, generated once via OpenRouter,
+ * cached in the `article_ai_summaries` table.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
@@ -15,7 +16,7 @@ if (!function_exists('curl_init')) {
 
 $body = json_decode(file_get_contents('php://input') ?: '', true) ?: [];
 $aid = (int)($body['article_id'] ?? 0);
-$lang = strtolower((string)($body['lang'] ?? 'en'));
+$lang = strtolower(trim((string)($body['lang'] ?? 'en')));
 if ($aid <= 0) ne_json(['ok'=>false,'error'=>'bad_id'], 400);
 
 $db = ne_db();
@@ -23,53 +24,85 @@ if (!$db) ne_json(['ok'=>false,'error'=>'db'], 500);
 
 global $CONFIG;
 
-// ── Language config ──────────────────────────────────────────────────
-$langCols = [
-    'en' => 'ai_summary',
-    'hi' => 'ai_summary_hi',
-    'bn' => 'ai_summary_bn',
-    'mr' => 'ai_summary_mr',
-    'ta' => 'ai_summary_ta',
-    'te' => 'ai_summary_te',
-    'kn' => 'ai_summary_kn',
-    'gu' => 'ai_summary_gu',
-    'ml' => 'ai_summary_ml',
-    'pa' => 'ai_summary_pa',
-];
-$langNames = [
-    'en' => 'English',
-    'hi' => 'Hindi',
-    'bn' => 'Bengali',
-    'mr' => 'Marathi',
-    'ta' => 'Tamil',
-    'te' => 'Telugu',
-    'kn' => 'Kannada',
-    'gu' => 'Gujarati',
-    'ml' => 'Malayalam',
-    'pa' => 'Punjabi',
+// ── 50 World Languages ──────────────────────────────────────────────
+$LANGUAGES = [
+    'am'    => ['name' => 'Amharic',              'native' => 'አማርኛ',            'script' => 'አ'],
+    'ar'    => ['name' => 'Arabic',               'native' => 'العربية',          'script' => 'ع'],
+    'bn'    => ['name' => 'Bengali',              'native' => 'বাংলা',            'script' => 'ব'],
+    'bg'    => ['name' => 'Bulgarian',            'native' => 'Български',        'script' => 'Б'],
+    'my'    => ['name' => 'Burmese',              'native' => 'မြန်မာ',           'script' => 'မ'],
+    'zh'    => ['name' => 'Chinese (Simplified)', 'native' => '中文（简体）',      'script' => '简'],
+    'zh-tw' => ['name' => 'Chinese (Traditional)','native' => '中文（繁體）',      'script' => '繁'],
+    'hr'    => ['name' => 'Croatian',             'native' => 'Hrvatski',         'script' => 'Hr'],
+    'cs'    => ['name' => 'Czech',                'native' => 'Čeština',          'script' => 'Čs'],
+    'da'    => ['name' => 'Danish',               'native' => 'Dansk',            'script' => 'Da'],
+    'nl'    => ['name' => 'Dutch',                'native' => 'Nederlands',       'script' => 'Nl'],
+    'en'    => ['name' => 'English',              'native' => 'English',          'script' => 'En'],
+    'fil'   => ['name' => 'Filipino',             'native' => 'Filipino',         'script' => 'Fl'],
+    'fi'    => ['name' => 'Finnish',              'native' => 'Suomi',            'script' => 'Fi'],
+    'fr'    => ['name' => 'French',               'native' => 'Français',         'script' => 'Fr'],
+    'de'    => ['name' => 'German',               'native' => 'Deutsch',          'script' => 'De'],
+    'el'    => ['name' => 'Greek',                'native' => 'Ελληνικά',         'script' => 'Ε'],
+    'gu'    => ['name' => 'Gujarati',             'native' => 'ગુજરાતી',          'script' => 'ગ'],
+    'he'    => ['name' => 'Hebrew',               'native' => 'עברית',            'script' => 'א'],
+    'hi'    => ['name' => 'Hindi',                'native' => 'हिन्दी',            'script' => 'हि'],
+    'hu'    => ['name' => 'Hungarian',            'native' => 'Magyar',           'script' => 'Hu'],
+    'id'    => ['name' => 'Indonesian',           'native' => 'Bahasa Indonesia', 'script' => 'Id'],
+    'it'    => ['name' => 'Italian',              'native' => 'Italiano',         'script' => 'It'],
+    'ja'    => ['name' => 'Japanese',             'native' => '日本語',            'script' => '日'],
+    'kn'    => ['name' => 'Kannada',              'native' => 'ಕನ್ನಡ',             'script' => 'ಕ'],
+    'ko'    => ['name' => 'Korean',               'native' => '한국어',             'script' => '한'],
+    'ms'    => ['name' => 'Malay',                'native' => 'Bahasa Melayu',    'script' => 'Ms'],
+    'ml'    => ['name' => 'Malayalam',            'native' => 'മലയാളം',           'script' => 'മ'],
+    'mr'    => ['name' => 'Marathi',              'native' => 'मराठी',             'script' => 'म'],
+    'ne'    => ['name' => 'Nepali',               'native' => 'नेपाली',            'script' => 'ने'],
+    'no'    => ['name' => 'Norwegian',            'native' => 'Norsk',            'script' => 'No'],
+    'fa'    => ['name' => 'Persian',              'native' => 'فارسی',            'script' => 'فا'],
+    'pl'    => ['name' => 'Polish',               'native' => 'Polski',           'script' => 'Pl'],
+    'pt'    => ['name' => 'Portuguese',           'native' => 'Português',        'script' => 'Pt'],
+    'pa'    => ['name' => 'Punjabi',              'native' => 'ਪੰਜਾਬੀ',           'script' => 'ਪ'],
+    'ro'    => ['name' => 'Romanian',             'native' => 'Română',           'script' => 'Ro'],
+    'ru'    => ['name' => 'Russian',              'native' => 'Русский',          'script' => 'Р'],
+    'sr'    => ['name' => 'Serbian',              'native' => 'Српски',           'script' => 'С'],
+    'si'    => ['name' => 'Sinhala',              'native' => 'සිංහල',            'script' => 'ස'],
+    'sk'    => ['name' => 'Slovak',               'native' => 'Slovenčina',       'script' => 'Sk'],
+    'es'    => ['name' => 'Spanish',              'native' => 'Español',          'script' => 'Es'],
+    'sw'    => ['name' => 'Swahili',              'native' => 'Kiswahili',        'script' => 'Sw'],
+    'sv'    => ['name' => 'Swedish',              'native' => 'Svenska',          'script' => 'Sv'],
+    'ta'    => ['name' => 'Tamil',                'native' => 'தமிழ்',             'script' => 'த'],
+    'te'    => ['name' => 'Telugu',               'native' => 'తెలుగు',            'script' => 'తె'],
+    'th'    => ['name' => 'Thai',                 'native' => 'ไทย',              'script' => 'ก'],
+    'tr'    => ['name' => 'Turkish',              'native' => 'Türkçe',           'script' => 'Tr'],
+    'uk'    => ['name' => 'Ukrainian',            'native' => 'Українська',       'script' => 'У'],
+    'ur'    => ['name' => 'Urdu',                 'native' => 'اردو',             'script' => 'ا'],
+    'vi'    => ['name' => 'Vietnamese',           'native' => 'Tiếng Việt',       'script' => 'Vi'],
 ];
 
 // Validate language
-if (!isset($langCols[$lang])) {
+if (!isset($LANGUAGES[$lang])) {
     $lang = 'en';
 }
-$col = $langCols[$lang];
-$targetLangName = $langNames[$lang];
+$targetLangName = $LANGUAGES[$lang]['name'];
 
 try {
+    // ── Fetch article ────────────────────────────────────────────────
     $stmt = $db->prepare(
-        "SELECT id, title, summary, content,
-                ai_summary, ai_summary_hi, ai_summary_bn, ai_summary_mr, ai_summary_ta,
-                ai_summary_te, ai_summary_kn, ai_summary_gu, ai_summary_ml, ai_summary_pa
-         FROM news_articles WHERE id = :a"
+        "SELECT id, title, summary, content FROM news_articles WHERE id = :a"
     );
     $stmt->execute([':a'=>$aid]);
     $art = $stmt->fetch();
     if (!$art) ne_json(['ok'=>false,'error'=>'not_found'], 404);
 
-    // ── Return cached summary if available ───────────────────────────
-    if (!empty($art[$col])) {
-        ne_json(['ok'=>true,'cached'=>true,'summary'=>$art[$col]]);
+    // ── Check cache in article_ai_summaries table ────────────────────
+    $cacheStmt = $db->prepare(
+        "SELECT summary FROM article_ai_summaries
+         WHERE article_id = :a AND language_code = :lang LIMIT 1"
+    );
+    $cacheStmt->execute([':a' => $aid, ':lang' => $lang]);
+    $cached = $cacheStmt->fetch();
+
+    if ($cached && !empty($cached['summary'])) {
+        ne_json(['ok'=>true,'cached'=>true,'summary'=>$cached['summary']]);
     }
 
     $key = $CONFIG['openrouter']['key'] ?? '';
@@ -169,9 +202,12 @@ try {
         ne_json(['ok'=>false,'error'=>'ai_failed','detail'=>$lastErr], 502);
     }
 
-    // ── Cache summary in the correct column ──────────────────────────
-    $db->prepare("UPDATE news_articles SET `{$col}` = :summary WHERE id = :a")
-       ->execute([':summary'=>$summary, ':a'=>$aid]);
+    // ── Cache summary in article_ai_summaries table ──────────────────
+    $db->prepare(
+        "INSERT INTO article_ai_summaries (article_id, language_code, summary)
+         VALUES (:a, :lang, :summary)
+         ON DUPLICATE KEY UPDATE summary = VALUES(summary), created_at = CURRENT_TIMESTAMP"
+    )->execute([':a' => $aid, ':lang' => $lang, ':summary' => $summary]);
 
     ne_json(['ok'=>true,'cached'=>false,'summary'=>$summary]);
 } catch (Throwable $e) {

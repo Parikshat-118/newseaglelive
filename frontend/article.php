@@ -94,18 +94,27 @@ include __DIR__ . '/includes/header.php';
         <svg viewBox="0 0 24 24" fill="<?= $userLiked ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         <span>Like</span> <span data-count><?= (int)$a['like_count'] ?></span>
       </button>
-      <select id="ai-lang-select" class="action-btn" style="min-width:140px;padding:0.45rem 0.6rem;height:auto;border-color:var(--highlight);color:var(--highlight);background:var(--surface);cursor:pointer;font-size:0.85rem;border-radius:8px;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path fill=%22%23e8a838%22 d=%22M2 4l4 4 4-4%22/></svg>');background-repeat:no-repeat;background-position:right 0.5rem center;padding-right:1.5rem">
-        <option value="en">English</option>
-        <option value="hi">हिन्दी (Hindi)</option>
-        <option value="bn">বাংলা (Bengali)</option>
-        <option value="mr">मराठी (Marathi)</option>
-        <option value="ta">தமிழ் (Tamil)</option>
-        <option value="te">తెలుగు (Telugu)</option>
-        <option value="kn">ಕನ್ನಡ (Kannada)</option>
-        <option value="gu">ગુજરાતી (Gujarati)</option>
-        <option value="ml">മലയാളം (Malayalam)</option>
-        <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
-      </select>
+      <div class="lang-dropdown-wrap" id="lang-dropdown-wrap" style="position:relative">
+        <button class="action-btn lang-trigger" id="lang-trigger" type="button" style="min-width:160px;justify-content:space-between;border-color:var(--highlight);color:var(--highlight);gap:0.6rem">
+          <span style="display:flex;align-items:center;gap:0.5rem">
+            <span class="lang-badge" id="lang-badge-selected">En</span>
+            <span id="lang-label-selected">English</span>
+          </span>
+          <svg width="12" height="12" viewBox="0 0 12 12" style="flex-shrink:0;opacity:.7"><path fill="currentColor" d="M2 4l4 4 4-4"/></svg>
+        </button>
+        <div class="lang-overlay" id="lang-overlay"></div>
+        <div class="lang-menu" id="lang-menu">
+          <div class="lang-header">
+            <span class="lang-header-title">Select Language</span>
+            <button type="button" class="lang-close-btn" id="lang-close-btn" aria-label="Close">✕</button>
+          </div>
+          <div class="lang-search-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" class="lang-search" id="lang-search" placeholder="Search languages..." autocomplete="off" spellcheck="false">
+          </div>
+          <div class="lang-list" id="lang-list"></div>
+        </div>
+      </div>
       <button class="action-btn" id="ai-explain-btn" data-aid="<?= $id ?>" type="button" style="min-width:140px;justify-content:center;border-color:var(--highlight);color:var(--highlight)">
         ✨ <span>Explain with AI</span>
       </button>
@@ -148,43 +157,248 @@ include __DIR__ . '/includes/header.php';
       <div id="ai-explain-result" style="color:var(--text-soft);white-space:pre-line;line-height:1.7"></div>
     </div>
 
+<style>
+/* ═══ LANGUAGE DROPDOWN ═══ */
+.lang-dropdown-wrap{display:inline-block;position:relative;z-index:20}
+.lang-trigger{cursor:pointer}
+.lang-badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 5px;background:color-mix(in srgb,var(--highlight) 18%,transparent);color:var(--highlight);border-radius:6px;font-family:var(--ff-mono);font-size:11px;font-weight:700;letter-spacing:.02em;line-height:1}
+
+/* Backdrop overlay — hidden by default */
+.lang-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.lang-overlay.open{display:block}
+
+/* Desktop: floating panel */
+.lang-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;width:320px;max-height:420px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;flex-direction:column;animation:langFadeIn .18s ease;z-index:99999}
+.lang-menu.open{display:flex}
+@keyframes langFadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Header — hidden on desktop, shown on mobile */
+.lang-header{display:none}
+
+.lang-search-wrap{display:flex;align-items:center;gap:.5rem;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.lang-search{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:16px;padding:2px 0}
+.lang-search::placeholder{color:var(--muted)}
+.lang-list{flex:1;overflow-y:auto;padding:6px;-webkit-overflow-scrolling:touch}
+.lang-list::-webkit-scrollbar{width:5px}
+.lang-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.lang-item{display:flex;align-items:center;gap:.65rem;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .12s ease,color .12s ease;font-size:14px}
+.lang-item:hover{background:color-mix(in srgb,var(--highlight) 12%,transparent)}
+.lang-item.active{background:color-mix(in srgb,var(--highlight) 20%,transparent);color:var(--highlight)}
+.lang-item .lang-badge{flex-shrink:0}
+.lang-native{color:var(--text);font-weight:500}
+.lang-english{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
+.lang-no-results{padding:1.5rem;text-align:center;color:var(--muted);font-size:13px}
+
+@media(max-width:640px){
+  /* Mobile: full-screen modal with header bar */
+  .lang-menu{
+    position:fixed;inset:0;width:100%;height:100%;max-height:none;
+    border-radius:0;z-index:99999;
+    animation:langSlideUp .25s cubic-bezier(.2,.7,.2,1)
+  }
+  @keyframes langSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+  /* Header bar — like a proper app */
+  .lang-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top, 0px));
+    background:var(--surface);border-bottom:1px solid var(--border);
+    flex-shrink:0
+  }
+  .lang-header-title{
+    font-family:var(--ff-display);font-weight:700;font-size:1.1rem;color:var(--text)
+  }
+  .lang-close-btn{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:34px;height:34px;border-radius:50%;
+    background:var(--surface2);border:1px solid var(--border);
+    color:var(--text);font-size:1rem;cursor:pointer;
+    transition:background .15s ease
+  }
+  .lang-close-btn:active{background:var(--border)}
+
+  /* Search stays pinned */
+  .lang-search-wrap{flex-shrink:0;padding:10px 16px}
+
+  /* List fills remaining space */
+  .lang-list{padding:6px 10px}
+  .lang-item{padding:12px 14px;font-size:15px}
+}
+</style>
+
     <script>
     (function(){
+      // ── Language Data (50 languages, alphabetical by English name) ──
+      var LANGS = [
+        {code:'am',name:'Amharic',native:'አማርኛ',script:'አ'},
+        {code:'ar',name:'Arabic',native:'العربية',script:'ع'},
+        {code:'bn',name:'Bengali',native:'বাংলা',script:'ব'},
+        {code:'bg',name:'Bulgarian',native:'Български',script:'Б'},
+        {code:'my',name:'Burmese',native:'မြန်မာ',script:'မ'},
+        {code:'zh',name:'Chinese (Simplified)',native:'中文（简体）',script:'简'},
+        {code:'zh-tw',name:'Chinese (Traditional)',native:'中文（繁體）',script:'繁'},
+        {code:'hr',name:'Croatian',native:'Hrvatski',script:'Hr'},
+        {code:'cs',name:'Czech',native:'Čeština',script:'Čs'},
+        {code:'da',name:'Danish',native:'Dansk',script:'Da'},
+        {code:'nl',name:'Dutch',native:'Nederlands',script:'Nl'},
+        {code:'en',name:'English',native:'English',script:'En'},
+        {code:'fil',name:'Filipino',native:'Filipino',script:'Fl'},
+        {code:'fi',name:'Finnish',native:'Suomi',script:'Fi'},
+        {code:'fr',name:'French',native:'Français',script:'Fr'},
+        {code:'de',name:'German',native:'Deutsch',script:'De'},
+        {code:'el',name:'Greek',native:'Ελληνικά',script:'Ε'},
+        {code:'gu',name:'Gujarati',native:'ગુજરાતી',script:'ગ'},
+        {code:'he',name:'Hebrew',native:'עברית',script:'א'},
+        {code:'hi',name:'Hindi',native:'हिन्दी',script:'हि'},
+        {code:'hu',name:'Hungarian',native:'Magyar',script:'Hu'},
+        {code:'id',name:'Indonesian',native:'Bahasa Indonesia',script:'Id'},
+        {code:'it',name:'Italian',native:'Italiano',script:'It'},
+        {code:'ja',name:'Japanese',native:'日本語',script:'日'},
+        {code:'kn',name:'Kannada',native:'ಕನ್ನಡ',script:'ಕ'},
+        {code:'ko',name:'Korean',native:'한국어',script:'한'},
+        {code:'ms',name:'Malay',native:'Bahasa Melayu',script:'Ms'},
+        {code:'ml',name:'Malayalam',native:'മലയാളം',script:'മ'},
+        {code:'mr',name:'Marathi',native:'मराठी',script:'म'},
+        {code:'ne',name:'Nepali',native:'नेपाली',script:'ने'},
+        {code:'no',name:'Norwegian',native:'Norsk',script:'No'},
+        {code:'fa',name:'Persian',native:'فارسی',script:'فا'},
+        {code:'pl',name:'Polish',native:'Polski',script:'Pl'},
+        {code:'pt',name:'Portuguese',native:'Português',script:'Pt'},
+        {code:'pa',name:'Punjabi',native:'ਪੰਜਾਬੀ',script:'ਪ'},
+        {code:'ro',name:'Romanian',native:'Română',script:'Ro'},
+        {code:'ru',name:'Russian',native:'Русский',script:'Р'},
+        {code:'sr',name:'Serbian',native:'Српски',script:'С'},
+        {code:'si',name:'Sinhala',native:'සිංහල',script:'ස'},
+        {code:'sk',name:'Slovak',native:'Slovenčina',script:'Sk'},
+        {code:'es',name:'Spanish',native:'Español',script:'Es'},
+        {code:'sw',name:'Swahili',native:'Kiswahili',script:'Sw'},
+        {code:'sv',name:'Swedish',native:'Svenska',script:'Sv'},
+        {code:'ta',name:'Tamil',native:'தமிழ்',script:'த'},
+        {code:'te',name:'Telugu',native:'తెలుగు',script:'తె'},
+        {code:'th',name:'Thai',native:'ไทย',script:'ก'},
+        {code:'tr',name:'Turkish',native:'Türkçe',script:'Tr'},
+        {code:'uk',name:'Ukrainian',native:'Українська',script:'У'},
+        {code:'ur',name:'Urdu',native:'اردو',script:'ا'},
+        {code:'vi',name:'Vietnamese',native:'Tiếng Việt',script:'Vi'}
+      ];
+
+      var selectedLang = LANGS.find(function(l){ return l.code === 'en'; });
+      var wrap = document.getElementById('lang-dropdown-wrap');
+      var trigger = document.getElementById('lang-trigger');
+      var menu = document.getElementById('lang-menu');
+      var list = document.getElementById('lang-list');
+      var search = document.getElementById('lang-search');
+      var badgeSel = document.getElementById('lang-badge-selected');
+      var labelSel = document.getElementById('lang-label-selected');
       var btn = document.getElementById('ai-explain-btn');
-      var langSelect = document.getElementById('ai-lang-select');
-      if (!btn || !langSelect) return;
+      var closeBtn = document.getElementById('lang-close-btn');
 
-      var langLabels = {en:'English',hi:'हिन्दी',bn:'বাংলা',mr:'मराठी',ta:'தமிழ்',te:'తెలుగు',kn:'ಕನ್ನಡ',gu:'ગુજરાતી',ml:'മലയാളം',pa:'ਪੰਜਾਬੀ'};
+      if (!trigger || !menu || !list || !btn) return;
 
+      // ── Render language list ───────────────────────────────────────
+      function renderList(filter) {
+        var q = (filter || '').toLowerCase().trim();
+        var html = '';
+        var count = 0;
+        LANGS.forEach(function(l){
+          if (q && l.name.toLowerCase().indexOf(q) === -1
+              && l.native.toLowerCase().indexOf(q) === -1
+              && l.code.indexOf(q) === -1) return;
+          count++;
+          var isActive = selectedLang && selectedLang.code === l.code;
+          html += '<div class="lang-item' + (isActive ? ' active' : '') + '" data-code="' + l.code + '">'
+            + '<span class="lang-badge">' + l.script + '</span>'
+            + '<span class="lang-native">' + l.native + '</span>'
+            + '<span class="lang-english">' + l.name + '</span>'
+            + '</div>';
+        });
+        if (count === 0) {
+          html = '<div class="lang-no-results">No languages found</div>';
+        }
+        list.innerHTML = html;
+      }
+
+      // ── Open / Close ──────────────────────────────────────────────
+      function openMenu(){
+        menu.classList.add('open');
+        search.value = '';
+        renderList('');
+        setTimeout(function(){ search.focus(); }, 50);
+      }
+      function closeMenu(){
+        menu.classList.remove('open');
+      }
+
+      trigger.addEventListener('click', function(e){
+        e.stopPropagation();
+        if (menu.classList.contains('open')) closeMenu();
+        else openMenu();
+      });
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeMenu);
+      }
+
+      // Close on outside click
+      document.addEventListener('click', function(e){
+        if (!wrap.contains(e.target)) closeMenu();
+      });
+
+      // Close on Escape
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') closeMenu();
+      });
+
+      // ── Search filtering ──────────────────────────────────────────
+      search.addEventListener('input', function(){
+        renderList(this.value);
+      });
+
+      // ── Select a language ─────────────────────────────────────────
+      list.addEventListener('click', function(e){
+        var item = e.target.closest('.lang-item');
+        if (!item) return;
+        var code = item.getAttribute('data-code');
+        selectedLang = LANGS.find(function(l){ return l.code === code; });
+        if (selectedLang) {
+          badgeSel.textContent = selectedLang.script;
+          labelSel.textContent = selectedLang.native;
+        }
+        closeMenu();
+      });
+
+      // Initial render
+      renderList('');
+
+      // ── AI Explain button ─────────────────────────────────────────
       btn.addEventListener('click', function(){
         btn.disabled = true;
-        langSelect.disabled = true;
+        trigger.style.pointerEvents = 'none';
         btn.querySelector('span').textContent = 'Thinking…';
-        var selectedLang = langSelect.value;
 
         fetch('/api/ai-explain.php', {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ article_id: +btn.getAttribute('data-aid'), lang: selectedLang })
+          body: JSON.stringify({ article_id: +btn.getAttribute('data-aid'), lang: selectedLang.code })
         }).then(function(r){return r.json();}).then(function(d){
           if (d.ok) {
             document.getElementById('ai-explain-result').textContent = d.summary || '';
-            document.getElementById('ai-explain-lang-label').textContent = langLabels[selectedLang] || selectedLang;
+            document.getElementById('ai-explain-lang-label').textContent = selectedLang.native + ' (' + selectedLang.name + ')';
             document.getElementById('ai-explain-box').style.display = 'block';
             document.getElementById('ai-explain-box').scrollIntoView({behavior:'smooth', block:'nearest'});
             btn.querySelector('span').textContent = 'Explain with AI';
             btn.disabled = false;
-            langSelect.disabled = false;
+            trigger.style.pointerEvents = '';
           } else {
             btn.querySelector('span').textContent = 'Try again';
             btn.disabled = false;
-            langSelect.disabled = false;
+            trigger.style.pointerEvents = '';
             if (d.error === 'php_curl_missing') alert('Server needs php-curl: ' + (d.hint||''));
             else if (d.detail) console.warn('AI explain failed:', d.error, d.detail);
           }
         }).catch(function(){
           btn.querySelector('span').textContent = 'Try again';
           btn.disabled = false;
-          langSelect.disabled = false;
+          trigger.style.pointerEvents = '';
         });
       });
     })();

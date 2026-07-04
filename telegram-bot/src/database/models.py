@@ -135,6 +135,18 @@ class NewsArticle(Base):
     fetched_at:   Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class ArticleAISummary(Base):
+    """Cached AI explanations for articles in any language."""
+    __tablename__ = "article_ai_summaries"
+    __table_args__ = (UniqueConstraint("article_id", "language_code", name="uq_article_lang"),)
+
+    id:            Mapped[int]      = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    article_id:    Mapped[int]      = mapped_column(ForeignKey("news_articles.id", ondelete="CASCADE"), nullable=False)
+    language_code: Mapped[str]      = mapped_column(String(10), nullable=False)
+    summary:       Mapped[str]      = mapped_column(Text, nullable=False)
+    created_at:    Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Bookmark(Base):
     __tablename__ = "bookmarks"
     __table_args__ = (UniqueConstraint("user_id", "article_id", name="uq_bookmark"),)
