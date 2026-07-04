@@ -16,9 +16,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Iterable, List, Optional
+import os
+import re
+import urllib.parse
+from uuid import uuid4
 
+import httpx
 from sqlalchemy import select, or_, and_, func, desc
 
+from src.config.settings import get_settings
 from src.database.connection import session_scope
 from src.database.models import NewsArticle, ReadingHistory
 from src.services.source_adapters.base import FetchedArticle
@@ -77,38 +83,89 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
     if not candidates:
         return 0
 
-    new_count = 0
+    # 1. First, check which ones already exist in the DB
     with session_scope() as s:
-        # Existence check in DB (Redis may have cold-started)
         hashes = [h for _, _, h in candidates]
         existing = {
             row[0] for row in s.execute(
                 select(NewsArticle.url_hash).where(NewsArticle.url_hash.in_(hashes))
             ).all()
         }
-        rows = []
-        for f, url, h in candidates:
-            if h in existing:
-                continue
-            t_lower = (f.title or "").lower()
-            is_breaking = f.is_breaking or any(k in t_lower for k in _BREAKING_HINTS)
-            rows.append(NewsArticle(
-                url_hash=h,
-                url=url,
-                title=f.title or "",
-                summary=f.summary,
-                content=f.content,
-                image_url=f.image_url,
-                category=f.category,
-                language=f.language or "en",
-                source_name=f.source_name,
-                is_breaking=is_breaking,
-                published_at=f.published_at or datetime.utcnow(),
-            ))
-        if rows:
-            s.add_all(rows)
-            new_count = len(rows)
-    return new_count
+
+    # 2. Process AI covers outside the DB transaction to prevent locking the DB!
+    final_rows = []
+    for f, url, h in candidates:
+        if h in existing:
+            continue
+        
+        t_lower = (f.title or "").lower()
+        is_breaking = f.is_breaking or any(k in t_lower for k in _BREAKING_HINTS)
+        
+        image_url = f.image_url
+        if not image_url:
+            image_url = await _generate_ai_cover(f.title, f.summary)
+            # Pollinations AI enforces rate limits; sleep to prevent 429 Too Many Requests
+            import asyncio
+            await asyncio.sleep(2)
+
+        final_rows.append(NewsArticle(
+            url_hash=h,
+            url=url,
+            title=f.title or "",
+            summary=f.summary,
+            content=f.content,
+            image_url=image_url,
+            category=f.category,
+            language=f.language or "en",
+            source_name=f.source_name,
+            is_breaking=is_breaking,
+            published_at=f.published_at or datetime.utcnow(),
+        ))
+        
+    if not final_rows:
+        return 0
+
+    # 3. Bulk insert the finalized rows
+    with session_scope() as s:
+        s.add_all(final_rows)
+        return len(final_rows)
+
+
+async def _generate_ai_cover(title: str, summary: Optional[str]) -> Optional[str]:
+    """Generates an AI cover image if missing, returning the local relative URL."""
+    try:
+        safe_title = (title or "")[:150]
+        safe_summary = (summary or "")[:350]
+        
+        # Clean newlines and HTML tags
+        safe_title = re.sub(r'<[^>]+>', '', safe_title).replace('\n', ' ').strip()
+        safe_summary = re.sub(r'<[^>]+>', '', safe_summary).replace('\n', ' ').strip()
+        
+        prompt = (f"Professional editorial news photograph, highly realistic, illustrating the following news story. "
+                  f"Headline: {safe_title}. Summary: {safe_summary}. "
+                  f"Natural lighting, documentary style, accurate context, 16:9 composition. "
+                  f"No text, logos, watermarks, captions, or graphics.")
+        encoded_prompt = urllib.parse.quote(prompt)
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=630&nologo=true"
+        
+        covers_dir = get_settings().covers_dir
+        os.makedirs(covers_dir, exist_ok=True)
+        filename = f"{uuid4().hex}.jpg"
+        local_path = os.path.join(covers_dir, filename)
+        
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(url)
+            if resp.status_code == 429:
+                log.warning("Pollinations rate limit hit (429).")
+                return None
+            resp.raise_for_status()
+            with open(local_path, "wb") as f:
+                f.write(resp.content)
+                
+        return f"/assets/covers/{filename}"
+    except Exception as e:
+        log.warning("Failed to generate AI cover: {}", e)
+        return None
 
 
 # ----------------- Queries -----------------

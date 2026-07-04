@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     # --- Misc ---
     default_language: str = "en"
     app_env: str = "production"
+    covers_dir: str = "/app/covers"
 
     # -------- Derived helpers --------
 

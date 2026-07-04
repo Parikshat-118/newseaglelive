@@ -1,6 +1,6 @@
 <?php
 /**
- * POST /api/ai-explain.php  { article_id: 123, lang: "en"|"hi"|"bn"|"mr"|"ta" }
+ * POST /api/ai-explain.php  { article_id: 123, lang: "en"|"hi"|"bn"|"mr"|"ta"|"te"|"kn"|"gu"|"ml"|"pa" }
  * AI explanation in the requested language, generated once via OpenRouter, cached in DB.
  */
 declare(strict_types=1);
@@ -30,6 +30,11 @@ $langCols = [
     'bn' => 'ai_summary_bn',
     'mr' => 'ai_summary_mr',
     'ta' => 'ai_summary_ta',
+    'te' => 'ai_summary_te',
+    'kn' => 'ai_summary_kn',
+    'gu' => 'ai_summary_gu',
+    'ml' => 'ai_summary_ml',
+    'pa' => 'ai_summary_pa',
 ];
 $langNames = [
     'en' => 'English',
@@ -37,6 +42,11 @@ $langNames = [
     'bn' => 'Bengali',
     'mr' => 'Marathi',
     'ta' => 'Tamil',
+    'te' => 'Telugu',
+    'kn' => 'Kannada',
+    'gu' => 'Gujarati',
+    'ml' => 'Malayalam',
+    'pa' => 'Punjabi',
 ];
 
 // Validate language
@@ -48,8 +58,9 @@ $targetLangName = $langNames[$lang];
 
 try {
     $stmt = $db->prepare(
-        "SELECT id, title, summary, content, ai_summary, ai_summary_hi,
-                ai_summary_bn, ai_summary_mr, ai_summary_ta
+        "SELECT id, title, summary, content,
+                ai_summary, ai_summary_hi, ai_summary_bn, ai_summary_mr, ai_summary_ta,
+                ai_summary_te, ai_summary_kn, ai_summary_gu, ai_summary_ml, ai_summary_pa
          FROM news_articles WHERE id = :a"
     );
     $stmt->execute([':a'=>$aid]);
@@ -71,14 +82,22 @@ try {
     );
 
     $userPrompt =
-        "You are a skilled news analyst. Provide a detailed, expanded summary and explanation of "
-        . "this news article for a busy reader.\n\n"
+        "You are an expert news analyst and journalist. Provide a comprehensive, in-depth summary "
+        . "and explanation of this news article. Write for an intelligent reader who wants to "
+        . "deeply understand the story.\n\n"
         . "Your response MUST be written entirely in {$targetLangName}.\n\n"
-        . "Include the following sections:\n"
-        . "1. Key facts (bullet points covering who, what, when, where)\n"
-        . "2. Background context (explain the broader situation)\n"
-        . "3. Why it matters (impact and significance)\n"
-        . "4. What to watch next (future implications)\n\n"
+        . "Structure your explanation with these sections (use the section headers in {$targetLangName}):\n\n"
+        . "1. **Key Facts** — Cover all the essential details: who is involved, what happened, "
+        . "when and where it took place. Use bullet points.\n\n"
+        . "2. **Background & Context** — Explain the broader situation, history, or events leading "
+        . "up to this story. Help the reader understand why this event occurred.\n\n"
+        . "3. **Impact & Significance** — Describe who is affected and how. What are the political, "
+        . "economic, social, or humanitarian implications?\n\n"
+        . "4. **Different Perspectives** — If applicable, briefly mention how different stakeholders "
+        . "(government, opposition, experts, public) view this development.\n\n"
+        . "5. **What to Watch Next** — What could happen next? What are the future implications "
+        . "or upcoming events related to this story?\n\n"
+        . "Be detailed and thorough. Aim for at least 300 words of substantive analysis.\n\n"
         . "Reply with ONLY valid JSON, no markdown fences, exactly:\n"
         . '{"summary":"<your detailed explanation in ' . $targetLangName . '>"}'
         . "\n\nARTICLE:\n" . $newsText;
@@ -93,11 +112,11 @@ try {
         $payload = json_encode([
             'model' => $model,
             'messages' => [
-                ['role'=>'system','content'=>'You output only raw JSON. Never use markdown fences. Always respond in the language requested by the user.'],
+                ['role'=>'system','content'=>'You are a multilingual news analyst. You output only raw JSON. Never use markdown fences. Always respond in the language requested by the user. Provide thorough, detailed analysis.'],
                 ['role'=>'user','content'=>$userPrompt],
             ],
             'temperature' => 0.3,
-            'max_tokens' => 1500,
+            'max_tokens' => 2500,
         ]);
 
         $ch = curl_init('https://openrouter.ai/api/v1/chat/completions');
@@ -105,7 +124,7 @@ try {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_TIMEOUT => 75,
+            CURLOPT_TIMEOUT => 90,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
