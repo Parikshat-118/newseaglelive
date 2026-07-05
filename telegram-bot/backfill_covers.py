@@ -15,6 +15,7 @@ async def main():
     settings = get_settings()
     print("========================================")
     print(f"AI Cover Backfill Script")
+    print(f"Provider: {settings.ai_image_provider}")
     print(f"Target Directory: {settings.covers_dir}")
     print("========================================\n")
     
@@ -27,25 +28,29 @@ async def main():
         print("No articles missing images found.")
         return
         
-    print(f"Found {len(articles)} articles. Generating covers...")
+    print(f"Found {len(articles)} articles. Generating covers...\n")
     
     updated_count = 0
+    failed_count = 0
     for a in articles:
-        print(f"\nProcessing: {a.title[:80]}...")
-        cover_url = await _generate_ai_cover(a.title, a.summary)
-        if cover_url:
-            print(f"✅ Success! Generated image: {cover_url}")
+        print(f"Processing: {a.title[:80]}...")
+        gen_result = await _generate_ai_cover(a.title, a.summary, a.url_hash)
+        if gen_result:
+            cover_url = gen_result["url"]
+            print(f"✅ Success! {cover_url} (took {gen_result['time']:.1f}s)")
             with session_scope() as s:
                 db_art = s.get(NewsArticle, a.id)
                 db_art.image_url = cover_url
             updated_count += 1
         else:
             print("❌ Failed to generate cover.")
+            failed_count += 1
             
-        print("Waiting 2 seconds to avoid Pollinations API rate limits...")
-        await asyncio.sleep(2)
-            
-    print(f"\nDone! Successfully backfilled {updated_count} covers.")
+    print(f"\n========================================")
+    print(f"Backfill Complete!")
+    print(f"  Generated: {updated_count}")
+    print(f"  Failed:    {failed_count}")
+    print(f"========================================")
 
 if __name__ == "__main__":
     asyncio.run(main())

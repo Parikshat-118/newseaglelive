@@ -19,7 +19,6 @@ from typing import Iterable, List, Optional
 import os
 import re
 import urllib.parse
-from uuid import uuid4
 
 import httpx
 from sqlalchemy import select, or_, and_, func, desc
@@ -92,21 +91,67 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
             ).all()
         }
 
+    settings = get_settings()
+    _PLACEHOLDER_VALUES = {"", "null", "none", "n/a", "undefined"}
+    MIN_SIZE = settings.ai_image_min_size_kb * 1024  # bytes
+
+    # AI generation statistics
+    stats = {"generated": 0, "skipped": 0, "failed": 0, "reused": 0, "gen_times": []}
+
     # 2. Process AI covers outside the DB transaction to prevent locking the DB!
     final_rows = []
     for f, url, h in candidates:
         if h in existing:
             continue
-        
+
         t_lower = (f.title or "").lower()
         is_breaking = f.is_breaking or any(k in t_lower for k in _BREAKING_HINTS)
-        
+
         image_url = f.image_url
-        if not image_url:
-            image_url = await _generate_ai_cover(f.title, f.summary)
-            # Pollinations AI enforces rate limits; sleep to prevent 429 Too Many Requests
-            import asyncio
-            await asyncio.sleep(2)
+
+        # --- Robust missing image detection (#1) ---
+        image_is_missing = False
+        if not image_url or str(image_url).strip().lower() in _PLACEHOLDER_VALUES:
+            image_is_missing = True
+            log.debug("Article '{}': No publisher image provided.", (f.title or "")[:60])
+        elif settings.verify_publisher_images:
+            # --- Validate publisher image (#17) ---
+            is_valid = await _verify_publisher_image(image_url)
+            if not is_valid:
+                image_is_missing = True
+                log.info("Article '{}': Publisher image invalid/unreachable → generating AI cover.", (f.title or "")[:60])
+            else:
+                log.debug("Article '{}': Publisher image verified ✓. Skipping AI generation.", (f.title or "")[:60])
+                stats["skipped"] += 1
+        else:
+            log.debug("Article '{}': Publisher image exists. Skipping AI generation.", (f.title or "")[:60])
+            stats["skipped"] += 1
+
+        if image_is_missing:
+            # --- Deduplication check (#13) ---
+            dedup_filename = f"{h}.jpg"
+            dedup_path = os.path.join(settings.covers_dir, dedup_filename)
+            if os.path.exists(dedup_path) and os.path.getsize(dedup_path) >= MIN_SIZE:
+                image_url = f"/assets/covers/{dedup_filename}"
+                stats["reused"] += 1
+                log.info("Article '{}': Reusing existing AI cover ({:.1f} KB).",
+                         (f.title or "")[:60], os.path.getsize(dedup_path) / 1024)
+            else:
+                # Delete corrupted/small file if it exists
+                if os.path.exists(dedup_path):
+                    try:
+                        os.remove(dedup_path)
+                        log.warning("Deleted corrupted/small AI cover: {}", dedup_filename)
+                    except OSError:
+                        pass
+                gen_result = await _generate_ai_cover(f.title, f.summary, h)
+                if gen_result:
+                    image_url = gen_result["url"]
+                    stats["generated"] += 1
+                    stats["gen_times"].append(gen_result["time"])
+                else:
+                    image_url = None
+                    stats["failed"] += 1
 
         final_rows.append(NewsArticle(
             url_hash=h,
@@ -121,51 +166,190 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
             is_breaking=is_breaking,
             published_at=f.published_at or datetime.utcnow(),
         ))
-        
+
     if not final_rows:
         return 0
 
     # 3. Bulk insert the finalized rows
     with session_scope() as s:
         s.add_all(final_rows)
-        return len(final_rows)
+
+    # --- Log AI generation statistics (#15, #16) ---
+    total_gen = stats["generated"] + stats["failed"]
+    if total_gen > 0 or stats["reused"] > 0:
+        total_time = sum(stats["gen_times"])
+        avg_time = (total_time / len(stats["gen_times"])) if stats["gen_times"] else 0
+        log.info(
+            "AI Cover Summary | Generated: {} | Skipped: {} | Reused: {} | Failed: {} | "
+            "Avg time: {:.1f}s | Total AI time: {:.1f}s",
+            stats["generated"], stats["skipped"], stats["reused"], stats["failed"],
+            avg_time, total_time,
+        )
+
+    return len(final_rows)
 
 
-async def _generate_ai_cover(title: str, summary: Optional[str]) -> Optional[str]:
-    """Generates an AI cover image if missing, returning the local relative URL."""
-    try:
-        safe_title = (title or "")[:150]
-        safe_summary = (summary or "")[:350]
-        
-        # Clean newlines and HTML tags
-        safe_title = re.sub(r'<[^>]+>', '', safe_title).replace('\n', ' ').strip()
-        safe_summary = re.sub(r'<[^>]+>', '', safe_summary).replace('\n', ' ').strip()
-        
-        prompt = (f"Professional editorial news photograph, highly realistic, illustrating the following news story. "
-                  f"Headline: {safe_title}. Summary: {safe_summary}. "
-                  f"Natural lighting, documentary style, accurate context, 16:9 composition. "
-                  f"No text, logos, watermarks, captions, or graphics.")
-        encoded_prompt = urllib.parse.quote(prompt)
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=630&nologo=true"
-        
-        covers_dir = get_settings().covers_dir
-        os.makedirs(covers_dir, exist_ok=True)
-        filename = f"{uuid4().hex}.jpg"
-        local_path = os.path.join(covers_dir, filename)
-        
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.get(url)
-            if resp.status_code == 429:
-                log.warning("Pollinations rate limit hit (429).")
-                return None
+async def _generate_ai_cover(
+    title: str, summary: Optional[str], article_hash: str
+) -> Optional[dict]:
+    """
+    Generate an AI cover image. Returns {"url": str, "time": float} on success, None on failure.
+    Uses deterministic filenames based on article_hash to enable deduplication.
+    """
+    import asyncio
+    import time as _time
+
+    settings = get_settings()
+    MIN_SIZE = settings.ai_image_min_size_kb * 1024
+    RETRYABLE_CODES = {429, 500, 502, 503, 504}
+
+    # --- Graceful prompt construction (#11) ---
+    safe_title = re.sub(r'<[^>]+>', '', (title or "")[:150]).replace('\n', ' ').strip()
+    safe_summary = re.sub(r'<[^>]+>', '', (summary or "")[:350]).replace('\n', ' ').strip()
+
+    if safe_summary:
+        prompt_body = f"Headline: {safe_title}. Summary: {safe_summary}."
+    else:
+        prompt_body = f"Headline: {safe_title}."
+
+    prompt = (
+        "Professional editorial news photograph, highly realistic, "
+        "illustrating the following news story. "
+        f"{prompt_body} "
+        "Natural lighting, documentary style, accurate context, 16:9 composition. "
+        "No text, logos, watermarks, captions, or graphics."
+    )
+    encoded_prompt = urllib.parse.quote(prompt)
+
+    # --- Configurable provider URL (#10) ---
+    url = settings.ai_image_provider_url.replace("{prompt}", encoded_prompt)
+
+    covers_dir = settings.covers_dir
+    os.makedirs(covers_dir, exist_ok=True)
+    filename = f"{article_hash}.jpg"
+    local_path = os.path.join(covers_dir, filename)
+
+    log.info("Generating AI cover [{}] for '{}'...", settings.ai_image_provider, safe_title[:60])
+    start_time = _time.monotonic()
+
+    # --- Smart retries with exponential backoff (#6, #8, #9) ---
+    last_error = None
+    for attempt in range(1, settings.ai_image_max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=float(settings.ai_image_timeout)) as client:
+                resp = await client.get(url)
+
+            if resp.status_code in RETRYABLE_CODES:
+                wait = 2 ** attempt  # exponential backoff: 2, 4, 8 seconds
+                log.warning(
+                    "AI cover attempt {}/{} failed (HTTP {}). Retrying in {}s...",
+                    attempt, settings.ai_image_max_retries, resp.status_code, wait,
+                )
+                await asyncio.sleep(wait)
+                continue
+
             resp.raise_for_status()
-            with open(local_path, "wb") as f:
-                f.write(resp.content)
-                
-        return f"/assets/covers/{filename}"
+
+            # --- Response validation (#3) ---
+            content_type = resp.headers.get("Content-Type", "")
+            if not content_type.startswith("image/"):
+                log.error(
+                    "AI cover: Invalid content type '{}' from {}. Aborting.",
+                    content_type, settings.ai_image_provider,
+                )
+                return None
+
+            # --- Write file ---
+            try:
+                with open(local_path, "wb") as f:
+                    f.write(resp.content)
+            except OSError as write_err:
+                log.error("AI cover: Failed to write file {}: {}", local_path, write_err)
+                return None
+
+            # --- File verification (#4) + Size validation (#5) ---
+            if not os.path.exists(local_path):
+                log.error("AI cover: File not found after write: {}", local_path)
+                return None
+
+            file_size = os.path.getsize(local_path)
+            if file_size < MIN_SIZE:
+                log.warning(
+                    "AI cover: File too small ({:.1f} KB < {} KB). Deleting: {}",
+                    file_size / 1024, settings.ai_image_min_size_kb, filename,
+                )
+                # --- Cleanup (#14) ---
+                try:
+                    os.remove(local_path)
+                except OSError:
+                    pass
+                return None
+
+            elapsed = _time.monotonic() - start_time
+            log.info(
+                "AI cover saved ✓ | File: {} | Size: {:.1f} KB | Time: {:.1f}s",
+                filename, file_size / 1024, elapsed,
+            )
+            return {"url": f"/assets/covers/{filename}", "time": elapsed}
+
+        except (httpx.ReadTimeout, httpx.ConnectTimeout) as timeout_err:
+            wait = 2 ** attempt
+            log.warning(
+                "AI cover attempt {}/{} timed out ({}). Retrying in {}s...",
+                attempt, settings.ai_image_max_retries, type(timeout_err).__name__, wait,
+            )
+            last_error = timeout_err
+            await asyncio.sleep(wait)
+            continue
+
+        except Exception as e:
+            elapsed = _time.monotonic() - start_time
+            log.exception("AI cover generation failed after {:.1f}s: {}", elapsed, e)
+            # --- Cleanup (#14) ---
+            if os.path.exists(local_path):
+                try:
+                    os.remove(local_path)
+                except OSError:
+                    pass
+            return None
+
+    # All retries exhausted
+    log.error(
+        "AI cover: All {} attempts failed for '{}'. Last error: {}",
+        settings.ai_image_max_retries, safe_title[:60], last_error,
+    )
+    return None
+
+
+async def _verify_publisher_image(image_url: str) -> bool:
+    """
+    Lightweight validation of a publisher-provided image URL (#17).
+    Performs a HEAD request to verify the URL returns HTTP 200 with an image Content-Type.
+    """
+    try:
+        # Basic URL syntax check
+        parsed = urllib.parse.urlparse(image_url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            log.debug("Publisher image URL has invalid scheme/host: {}", image_url[:100])
+            return False
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.head(image_url, follow_redirects=True)
+
+        if resp.status_code != 200:
+            log.debug("Publisher image returned HTTP {}: {}", resp.status_code, image_url[:100])
+            return False
+
+        content_type = resp.headers.get("Content-Type", "")
+        if not content_type.startswith("image/"):
+            log.debug("Publisher image has non-image Content-Type '{}': {}", content_type, image_url[:100])
+            return False
+
+        return True
+
     except Exception as e:
-        log.warning("Failed to generate AI cover: {}", e)
-        return None
+        log.debug("Publisher image verification failed for {}: {}", image_url[:100], e)
+        return False
 
 
 # ----------------- Queries -----------------

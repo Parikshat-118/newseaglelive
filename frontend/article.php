@@ -94,7 +94,7 @@ include __DIR__ . '/includes/header.php';
         <svg viewBox="0 0 24 24" fill="<?= $userLiked ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         <span>Like</span> <span data-count><?= (int)$a['like_count'] ?></span>
       </button>
-      <div class="lang-dropdown-wrap" id="lang-dropdown-wrap" style="position:relative">
+      <div class="lang-dropdown-wrap" id="lang-dropdown-wrap">
         <button class="action-btn lang-trigger" id="lang-trigger" type="button" style="min-width:160px;justify-content:space-between;border-color:var(--highlight);color:var(--highlight);gap:0.6rem">
           <span style="display:flex;align-items:center;gap:0.5rem">
             <span class="lang-badge" id="lang-badge-selected">En</span>
@@ -102,18 +102,6 @@ include __DIR__ . '/includes/header.php';
           </span>
           <svg width="12" height="12" viewBox="0 0 12 12" style="flex-shrink:0;opacity:.7"><path fill="currentColor" d="M2 4l4 4 4-4"/></svg>
         </button>
-        <div class="lang-overlay" id="lang-overlay"></div>
-        <div class="lang-menu" id="lang-menu">
-          <div class="lang-header">
-            <span class="lang-header-title">Select Language</span>
-            <button type="button" class="lang-close-btn" id="lang-close-btn" aria-label="Close">✕</button>
-          </div>
-          <div class="lang-search-wrap">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <input type="text" class="lang-search" id="lang-search" placeholder="Search languages..." autocomplete="off" spellcheck="false">
-          </div>
-          <div class="lang-list" id="lang-list"></div>
-        </div>
       </div>
       <button class="action-btn" id="ai-explain-btn" data-aid="<?= $id ?>" type="button" style="min-width:140px;justify-content:center;border-color:var(--highlight);color:var(--highlight)">
         ✨ <span>Explain with AI</span>
@@ -159,71 +147,48 @@ include __DIR__ . '/includes/header.php';
 
 <style>
 /* ═══ LANGUAGE DROPDOWN ═══ */
-.lang-dropdown-wrap{display:inline-block;position:relative;z-index:20}
+.lang-dropdown-wrap{display:inline-block;position:relative}
 .lang-trigger{cursor:pointer}
 .lang-badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 5px;background:color-mix(in srgb,var(--highlight) 18%,transparent);color:var(--highlight);border-radius:6px;font-family:var(--ff-mono);font-size:11px;font-weight:700;letter-spacing:.02em;line-height:1}
 
-/* Backdrop overlay — hidden by default */
-.lang-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+/* ── Modal (appended to body by JS) ── */
+.lang-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100000;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 .lang-overlay.open{display:block}
+.lang-modal{display:none;position:fixed;z-index:100001;background:var(--surface);overflow:hidden;flex-direction:column;border:1px solid var(--border)}
+.lang-modal.open{display:flex}
 
-/* Desktop: floating panel */
-.lang-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;width:320px;max-height:420px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;flex-direction:column;animation:langFadeIn .18s ease;z-index:99999}
-.lang-menu.open{display:flex}
-@keyframes langFadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+/* Desktop: centered floating card */
+@media(min-width:641px){
+  .lang-modal{top:50%;left:50%;transform:translate(-50%,-50%);width:380px;max-height:520px;border-radius:16px;box-shadow:0 25px 80px rgba(0,0,0,.5);animation:langPop .2s ease}
+  @keyframes langPop{from{opacity:0;transform:translate(-50%,-50%) scale(.95)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+}
+/* Mobile: full-screen takeover */
+@media(max-width:640px){
+  .lang-modal{inset:0;width:100%;height:100%;border-radius:0;border:none;animation:langSlideUp .25s cubic-bezier(.2,.7,.2,1)}
+  @keyframes langSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+}
 
-/* Header — hidden on desktop, shown on mobile */
-.lang-header{display:none}
+.lang-modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;padding-top:calc(16px + env(safe-area-inset-top, 0px));border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface)}
+.lang-modal-title{font-family:var(--ff-display);font-weight:700;font-size:1.15rem;color:var(--text)}
+.lang-modal-close{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer;transition:background .15s ease;-webkit-tap-highlight-color:transparent}
+.lang-modal-close:hover{background:var(--border)}
+.lang-modal-close:active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
-.lang-search-wrap{display:flex;align-items:center;gap:.5rem;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.lang-search-wrap{display:flex;align-items:center;gap:.5rem;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0}
 .lang-search{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:16px;padding:2px 0}
 .lang-search::placeholder{color:var(--muted)}
-.lang-list{flex:1;overflow-y:auto;padding:6px;-webkit-overflow-scrolling:touch}
+.lang-list{flex:1;overflow-y:auto;padding:8px;-webkit-overflow-scrolling:touch}
 .lang-list::-webkit-scrollbar{width:5px}
 .lang-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-.lang-item{display:flex;align-items:center;gap:.65rem;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .12s ease,color .12s ease;font-size:14px}
+.lang-item{display:flex;align-items:center;gap:.7rem;padding:11px 14px;border-radius:10px;cursor:pointer;transition:background .12s ease;font-size:15px;-webkit-tap-highlight-color:transparent}
 .lang-item:hover{background:color-mix(in srgb,var(--highlight) 12%,transparent)}
+.lang-item:active{background:color-mix(in srgb,var(--highlight) 25%,transparent)}
 .lang-item.active{background:color-mix(in srgb,var(--highlight) 20%,transparent);color:var(--highlight)}
 .lang-item .lang-badge{flex-shrink:0}
 .lang-native{color:var(--text);font-weight:500}
 .lang-english{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
-.lang-no-results{padding:1.5rem;text-align:center;color:var(--muted);font-size:13px}
-
-@media(max-width:640px){
-  /* Mobile: full-screen modal with header bar */
-  .lang-menu{
-    position:fixed;inset:0;width:100%;height:100%;max-height:none;
-    border-radius:0;z-index:99999;
-    animation:langSlideUp .25s cubic-bezier(.2,.7,.2,1)
-  }
-  @keyframes langSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-
-  /* Header bar — like a proper app */
-  .lang-header{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top, 0px));
-    background:var(--surface);border-bottom:1px solid var(--border);
-    flex-shrink:0
-  }
-  .lang-header-title{
-    font-family:var(--ff-display);font-weight:700;font-size:1.1rem;color:var(--text)
-  }
-  .lang-close-btn{
-    display:inline-flex;align-items:center;justify-content:center;
-    width:34px;height:34px;border-radius:50%;
-    background:var(--surface2);border:1px solid var(--border);
-    color:var(--text);font-size:1rem;cursor:pointer;
-    transition:background .15s ease
-  }
-  .lang-close-btn:active{background:var(--border)}
-
-  /* Search stays pinned */
-  .lang-search-wrap{flex-shrink:0;padding:10px 16px}
-
-  /* List fills remaining space */
-  .lang-list{padding:6px 10px}
-  .lang-item{padding:12px 14px;font-size:15px}
-}
+.lang-no-results{padding:2rem;text-align:center;color:var(--muted);font-size:14px}
+body.lang-modal-open{overflow:hidden!important}
 </style>
 
     <script>
@@ -283,17 +248,33 @@ include __DIR__ . '/includes/header.php';
       ];
 
       var selectedLang = LANGS.find(function(l){ return l.code === 'en'; });
-      var wrap = document.getElementById('lang-dropdown-wrap');
       var trigger = document.getElementById('lang-trigger');
-      var menu = document.getElementById('lang-menu');
-      var list = document.getElementById('lang-list');
-      var search = document.getElementById('lang-search');
       var badgeSel = document.getElementById('lang-badge-selected');
       var labelSel = document.getElementById('lang-label-selected');
       var btn = document.getElementById('ai-explain-btn');
-      var closeBtn = document.getElementById('lang-close-btn');
+      if (!trigger || !btn) return;
 
-      if (!trigger || !menu || !list || !btn) return;
+      // ── Build modal HTML and append to <body> ──────────────────────
+      var overlay = document.createElement('div');
+      overlay.className = 'lang-overlay';
+      var modal = document.createElement('div');
+      modal.className = 'lang-modal';
+      modal.innerHTML =
+        '<div class="lang-modal-header">' +
+          '<span class="lang-modal-title">Select Language</span>' +
+          '<button type="button" class="lang-modal-close" aria-label="Close">✕</button>' +
+        '</div>' +
+        '<div class="lang-search-wrap">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
+          '<input type="text" class="lang-search" placeholder="Search languages..." autocomplete="off" spellcheck="false">' +
+        '</div>' +
+        '<div class="lang-list"></div>';
+      document.body.appendChild(overlay);
+      document.body.appendChild(modal);
+
+      var closeBtn = modal.querySelector('.lang-modal-close');
+      var search = modal.querySelector('.lang-search');
+      var list = modal.querySelector('.lang-list');
 
       // ── Render language list ───────────────────────────────────────
       function renderList(filter) {
@@ -319,34 +300,28 @@ include __DIR__ . '/includes/header.php';
       }
 
       // ── Open / Close ──────────────────────────────────────────────
-      function openMenu(){
-        menu.classList.add('open');
+      function openModal(){
+        overlay.classList.add('open');
+        modal.classList.add('open');
+        document.body.classList.add('lang-modal-open');
         search.value = '';
         renderList('');
-        setTimeout(function(){ search.focus(); }, 50);
+        setTimeout(function(){ search.focus(); }, 80);
       }
-      function closeMenu(){
-        menu.classList.remove('open');
+      function closeModal(){
+        overlay.classList.remove('open');
+        modal.classList.remove('open');
+        document.body.classList.remove('lang-modal-open');
       }
 
       trigger.addEventListener('click', function(e){
         e.stopPropagation();
-        if (menu.classList.contains('open')) closeMenu();
-        else openMenu();
+        openModal();
       });
-
-      if (closeBtn) {
-        closeBtn.addEventListener('click', closeMenu);
-      }
-
-      // Close on outside click
-      document.addEventListener('click', function(e){
-        if (!wrap.contains(e.target)) closeMenu();
-      });
-
-      // Close on Escape
+      closeBtn.addEventListener('click', closeModal);
+      overlay.addEventListener('click', closeModal);
       document.addEventListener('keydown', function(e){
-        if (e.key === 'Escape') closeMenu();
+        if (e.key === 'Escape') closeModal();
       });
 
       // ── Search filtering ──────────────────────────────────────────
@@ -364,7 +339,7 @@ include __DIR__ . '/includes/header.php';
           badgeSel.textContent = selectedLang.script;
           labelSel.textContent = selectedLang.native;
         }
-        closeMenu();
+        closeModal();
       });
 
       // Initial render
