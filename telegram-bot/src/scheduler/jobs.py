@@ -202,11 +202,51 @@ async def job_compute_warmeter() -> None:
         log.exception("[job] warmeter failed")
 
 
-async def job_student_content() -> None:
-    log.info("[job] student_content started")
+async def job_generate_upsc() -> None:
+    log.info("[job] generate upsc started")
     try:
-        from src.services import student_service as st
-        await st.generate_daily_student_content()
-        log.info("[job] student_content done")
+        from src.services.student_service import generate_content
+        await generate_content("upsc_quiz")
     except Exception:
-        log.exception("[job] student_content failed")
+        log.exception("[job] generate upsc failed")
+
+
+async def job_generate_media() -> None:
+    log.info("[job] generate media started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("media_quiz")
+    except Exception:
+        log.exception("[job] generate media failed")
+
+
+async def job_generate_editorial() -> None:
+    log.info("[job] generate editorial started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("editorial")
+    except Exception:
+        log.exception("[job] generate editorial failed")
+
+
+async def job_generate_mains() -> None:
+    log.info("[job] generate mains started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("mains")
+    except Exception:
+        log.exception("[job] generate mains failed")
+
+
+async def job_student_recovery() -> None:
+    log.info("[job] student recovery started")
+    try:
+        from datetime import date
+        from src.services.student_service import generate_content, _generation_exists
+        today = date.today()
+        for t in ["upsc_quiz", "media_quiz", "editorial", "mains"]:
+            if not _generation_exists(t, today):
+                log.info("Recovery: generating missing {}", t)
+                await generate_content(t, today)
+    except Exception:
+        log.exception("[job] student recovery failed")

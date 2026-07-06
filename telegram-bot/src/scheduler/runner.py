@@ -85,8 +85,24 @@ def start_scheduler(app: Application) -> AsyncIOScheduler:
         id="warmeter", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_student_content, CronTrigger(hour=6, minute=30),
-        id="student_content", max_instances=1, coalesce=True, replace_existing=True,
+        J.job_generate_upsc, CronTrigger(hour=6, minute=30),
+        id="gen_upsc", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
+        J.job_generate_media, CronTrigger(hour=6, minute=35),
+        id="gen_media", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
+        J.job_generate_editorial, CronTrigger(hour=6, minute=40),
+        id="gen_editorial", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
+        J.job_generate_mains, CronTrigger(hour=6, minute=45),
+        id="gen_mains", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
+        J.job_student_recovery, CronTrigger(hour=8, minute=0),
+        id="gen_recovery", max_instances=1, coalesce=True, replace_existing=True,
     )
 
     _scheduler.start()

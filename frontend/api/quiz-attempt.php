@@ -13,9 +13,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 }
 
 $user = ne_current_user();
-if (!$user) {
-    ne_json(['ok' => false, 'error' => 'auth'], 401);
-}
+$uId = $user ? $user['id'] : null;
 
 $body    = json_decode(file_get_contents('php://input') ?: '', true) ?: [];
 $quizId  = (int)($body['quiz_id']        ?? 0);
@@ -64,26 +62,28 @@ try {
 
     $accuracy = $total > 0 ? round($score / $total * 100, 2) : 0.0;
 
-    // Check if already attempted
-    $existing = $db->prepare(
-        "SELECT attempt_number FROM web_quiz_attempts WHERE user_id=:u AND quiz_id=:q"
-    );
-    $existing->execute([':u' => $user['id'], ':q' => $quizId]);
-    $prev = $existing->fetch();
+    // Check if already attempted (only for logged-in users)
+    if ($uId) {
+        $existing = $db->prepare(
+            "SELECT attempt_number FROM web_quiz_attempts WHERE user_id=:u AND quiz_id=:q"
+        );
+        $existing->execute([':u' => $uId, ':q' => $quizId]);
+        $prev = $existing->fetch();
 
-    if ($prev) {
-        // Already attempted — return cached result without saving again
-        ne_json(['ok' => true, 'score' => $score, 'total' => $total,
-                 'accuracy' => $accuracy, 'results' => $results]);
+        if ($prev) {
+            // Already attempted — return cached result without saving again
+            ne_json(['ok' => true, 'score' => $score, 'total' => $total,
+                     'accuracy' => $accuracy, 'results' => $results]);
+        }
     }
 
-    // Store first attempt
+    // Store attempt
     $db->prepare(
         "INSERT INTO web_quiz_attempts
              (user_id, quiz_id, score, total, accuracy, time_taken_sec, attempt_number, answers)
          VALUES (:u, :q, :s, :t, :ac, :ti, 1, :a)"
     )->execute([
-        ':u'  => $user['id'],
+        ':u'  => $uId,
         ':q'  => $quizId,
         ':s'  => $score,
         ':t'  => $total,
@@ -97,5 +97,5 @@ try {
 
 } catch (Throwable $e) {
     error_log('[quiz-attempt] ' . $e->getMessage());
-    ne_json(['ok' => false, 'error' => 'server'], 500);
+    ne_json(['ok' => false, 'error' => $e->getMessage()], 500);
 }
