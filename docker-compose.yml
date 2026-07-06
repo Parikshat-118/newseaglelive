@@ -45,6 +45,7 @@ services:
 
     volumes:
       - ./telegram-bot:/app
+      - ./frontend/assets/covers:/app/covers
 
     depends_on:
       mysql:

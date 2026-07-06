@@ -137,3 +137,4 @@ docker/.env
 
 telegram-bot/install-ready.sh
 telegram-bot/install.sh
+frontend/assets

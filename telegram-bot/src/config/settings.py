@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     # --- Misc ---
     default_language: str = "en"
     app_env: str = "production"
+    covers_dir: str = "/app/covers"
+
+    # --- AI Image Generation ---
+    ai_image_provider: str = "pollinations"
+    ai_image_provider_url: str = "https://image.pollinations.ai/prompt/{prompt}?width=1200&height=630&nologo=true"
+    ai_image_timeout: int = 10
+    ai_image_max_retries: int = 3
+    ai_image_min_size_kb: int = 5
+    verify_publisher_images: bool = True
 
     # -------- Derived helpers --------
 

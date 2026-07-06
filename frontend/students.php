@@ -2,182 +2,444 @@
 declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
-$PAGE_TITLE = 'Student Hub';
-$PAGE_DESCRIPTION = 'Daily UPSC, SSC & media-exam prep from today\'s news: MCQs, mains questions, editorial analysis.';
+$PAGE_TITLE       = 'Student Hub — UPSC, SSC & Media Exam Prep';
+$PAGE_DESCRIPTION = 'Daily UPSC, SSC & media-exam prep from today\'s news: MCQs, mains questions, editorial analysis, and leaderboard.';
 
 $user = ne_current_user();
-$db = ne_db();
+$db   = ne_db();
 
 $tab = $_GET['tab'] ?? 'quiz';
-if (!in_array($tab, ['quiz','media','mains','editorial','leaderboard'], true)) $tab = 'quiz';
+if (!in_array($tab, ['quiz', 'media', 'mains', 'editorial'], true)) {
+    $tab = 'quiz';
+}
 
-// ── Load content per tab ─────────────────────────────────────────────
-$mcq = null; $mcqAttempt = null; $mains = null; $editorial = null; $leaders = []; $myRank = null;
+$today = date('Y-m-d');
+$yesterday = date('Y-m-d', strtotime('-1 day'));
+$reqDate = $_GET['date'] ?? $today;
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $reqDate)) {
+    $reqDate = $today;
+}
+
+// ── Load content for the active tab ──────────────────────────────
+$quiz        = null;
+$questions   = [];
+$myAttempt   = null;
+$editorial   = null;
+$ed_points   = ['key_point' => [], 'arg_for' => [], 'arg_against' => []];
+$mains       = [];
+$mains       = [];
+$genStatus   = null;
 
 try {
     if ($tab === 'quiz' || $tab === 'media') {
         $exam = $tab === 'media' ? 'media' : 'upsc';
-        $s = $db->prepare("SELECT id, title, payload, content_date FROM student_content
-                           WHERE kind = 'mcq' AND exam = :e ORDER BY content_date DESC, id DESC LIMIT 1");
-        $s->execute([':e' => $exam]);
-        $mcq = $s->fetch();
-        if ($mcq && $user) {
-            $a = $db->prepare("SELECT score, total FROM web_quiz_attempts WHERE user_id = :u AND content_id = :c");
-            $a->execute([':u' => $user['id'], ':c' => $mcq['id']]);
-            $mcqAttempt = $a->fetch() ?: null;
+
+        $s = $db->prepare(
+            "SELECT q.id, q.title, q.quiz_date, g.status, g.model, g.provider
+             FROM daily_quizzes q
+             JOIN ai_generations g ON g.id = q.generation_id
+             WHERE q.exam_type = :e AND q.quiz_date = :d
+             ORDER BY q.id DESC LIMIT 1"
+        );
+        $s->execute([':e' => $exam, ':d' => $reqDate]);
+        $quiz = $s->fetch();
+
+        if ($quiz) {
+            $qs = $db->prepare(
+                "SELECT id, question, option_a, option_b, option_c, option_d,
+                        correct_option, explanation, topic, difficulty, order_no
+                 FROM quiz_questions WHERE quiz_id = :qi ORDER BY order_no"
+            );
+            $qs->execute([':qi' => $quiz['id']]);
+            $questions = $qs->fetchAll();
+
+            if ($user) {
+                $a = $db->prepare(
+                    "SELECT score, total, accuracy, time_taken_sec
+                     FROM web_quiz_attempts WHERE user_id = :u AND quiz_id = :q"
+                );
+                $a->execute([':u' => $user['id'], ':q' => $quiz['id']]);
+                $myAttempt = $a->fetch() ?: null;
+            }
+
+            // Source articles
+            $src = $db->prepare(
+                "SELECT a.id, a.title, a.url FROM news_articles a
+                 JOIN quiz_source_articles qsa ON qsa.article_id = a.id
+                 WHERE qsa.quiz_id = :qi LIMIT 5"
+            );
+            $src->execute([':qi' => $quiz['id']]);
+            $sourceArticles = $src->fetchAll();
+        } else {
+            // Check generation status
+            $gs = $db->prepare(
+                "SELECT status, error_msg FROM ai_generations
+                 WHERE content_type = :t AND content_date = :d LIMIT 1"
+            );
+            $gs->execute([':t' => ($exam === 'media' ? 'media_quiz' : 'upsc_quiz'), ':d' => $reqDate]);
+            $genStatus = $gs->fetch() ?: null;
         }
+
     } elseif ($tab === 'mains') {
-        $mains = $db->query("SELECT id, title, payload, content_date FROM student_content
-                             WHERE kind = 'mains' ORDER BY content_date DESC, id DESC LIMIT 1")->fetch();
+        $mq = $db->prepare(
+            "SELECT m.id, m.question, m.paper, m.hint, m.order_no
+             FROM daily_mains_questions m
+             WHERE DATE(m.mains_date) = :d
+             ORDER BY m.order_no"
+        );
+        $mq->execute([':d' => $reqDate]);
+        $mains = $mq->fetchAll();
+
+        if ($mains) {
+            foreach ($mains as &$mq_row) {
+                $pts = $db->prepare(
+                    "SELECT content FROM mains_answer_points
+                     WHERE mains_question_id = :mid ORDER BY order_no"
+                );
+                $pts->execute([':mid' => $mq_row['id']]);
+                $mq_row['points'] = $pts->fetchAll(PDO::FETCH_COLUMN);
+            }
+            unset($mq_row);
+        } else {
+            $gs = $db->prepare(
+                "SELECT status FROM ai_generations WHERE content_type='mains' AND content_date=:d LIMIT 1"
+            );
+            $gs->execute([':d' => $reqDate]);
+            $genStatus = $gs->fetch() ?: null;
+        }
+
     } elseif ($tab === 'editorial') {
-        $editorial = $db->query("SELECT id, title, payload, content_date FROM student_content
-                                 WHERE kind = 'editorial' ORDER BY content_date DESC, id DESC LIMIT 1")->fetch();
-    } elseif ($tab === 'leaderboard') {
-        $leaders = $db->query(
-            "SELECT u.display_name, u.first_name, SUM(a.score) AS pts, COUNT(*) AS quizzes
-             FROM web_quiz_attempts a JOIN users u ON u.id = a.user_id
-             WHERE a.taken_at >= (NOW() - INTERVAL 7 DAY)
-             GROUP BY a.user_id ORDER BY pts DESC LIMIT 20"
-        )->fetchAll();
+        $ed = $db->prepare(
+            "SELECT id, title, background, exam_relevance, conclusion
+             FROM daily_editorials
+             WHERE DATE(editorial_date) = :d LIMIT 1"
+        );
+        $ed->execute([':d' => $reqDate]);
+        $editorial = $ed->fetch();
+
+        if ($editorial) {
+            $epts = $db->prepare(
+                "SELECT point_type, content FROM editorial_points
+                 WHERE editorial_id = :eid ORDER BY point_type, order_no"
+            );
+            $epts->execute([':eid' => $editorial['id']]);
+            foreach ($epts->fetchAll() as $pt) {
+                $ed_points[$pt['point_type']][] = $pt['content'];
+            }
+
+            $src = $db->prepare(
+                "SELECT a.id, a.title, a.url FROM news_articles a
+                 JOIN editorial_source_articles esa ON esa.article_id = a.id
+                 WHERE esa.editorial_id = :eid LIMIT 5"
+            );
+            $src->execute([':eid' => $editorial['id']]);
+            $sourceArticles = $src->fetchAll();
+        } else {
+            $gs = $db->prepare(
+                "SELECT status FROM ai_generations WHERE content_type='editorial' AND content_date=:d LIMIT 1"
+            );
+            $gs->execute([':d' => $reqDate]);
+            $genStatus = $gs->fetch() ?: null;
+        }
+
     }
-} catch (Throwable $e) { error_log('[students] ' . $e->getMessage()); }
+} catch (Throwable $e) {
+    error_log('[students] ' . $e->getMessage());
+}
 
 include __DIR__ . '/includes/header.php';
 ?>
 
+<style>
+.archive-filters {
+    display: flex; gap: 0.5rem; margin: 1.5rem 0; flex-wrap: wrap; align-items: center;
+}
+.archive-filter {
+    padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 8px;
+    text-decoration: none; color: var(--text-soft); font-size: var(--fs-sm);
+    transition: all 0.2s; background: var(--surface2); cursor: pointer;
+}
+.archive-filter.active {
+    background: var(--accent); color: white; border-color: var(--accent);
+}
+.archive-filter:hover:not(.active) {
+    background: var(--surface); color: var(--text);
+}
+.date-picker {
+    padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text); font-family: var(--ff-body);
+}
+</style>
+
 <section class="section" style="padding-top:2rem">
   <div class="container">
+
     <div class="section-eyebrow"><span class="mono">🎓 Daily</span><span>Student Hub</span></div>
-    <h2 class="section-title">Today's news. Tomorrow's rank.</h2>
+    <h1 class="section-title">Today's news. Your practice.</h1>
     <p style="max-width:62ch;color:var(--text-soft);margin:-1.5rem 0 2rem">
       Fresh every morning at 6:30 — AI turns today's news into UPSC/SSC MCQs, Mains practice,
       editorial analysis, and a dedicated section for media-exam aspirants (IIMC, YMCA, JMI &amp; more).
     </p>
 
     <div class="admin-tabs">
-      <a class="admin-tab<?= $tab==='quiz' ? ' active' : '' ?>" href="?tab=quiz">📝 UPSC/SSC Quiz</a>
-      <a class="admin-tab<?= $tab==='media' ? ' active' : '' ?>" href="?tab=media">📺 Media Exams</a>
-      <a class="admin-tab<?= $tab==='mains' ? ' active' : '' ?>" href="?tab=mains">✍️ Mains Practice</a>
-      <a class="admin-tab<?= $tab==='editorial' ? ' active' : '' ?>" href="?tab=editorial">📰 Editorial</a>
-      <a class="admin-tab<?= $tab==='leaderboard' ? ' active' : '' ?>" href="?tab=leaderboard">🏆 Leaderboard</a>
+      <a id="tab-quiz"        class="admin-tab<?= $tab==='quiz'        ? ' active' : '' ?>" href="?tab=quiz">📝 UPSC/SSC Quiz</a>
+      <a id="tab-media"       class="admin-tab<?= $tab==='media'       ? ' active' : '' ?>" href="?tab=media">📺 Media Exams</a>
+      <a id="tab-mains"       class="admin-tab<?= $tab==='mains'       ? ' active' : '' ?>" href="?tab=mains">✍️ Mains Practice</a>
+      <a id="tab-editorial"   class="admin-tab<?= $tab==='editorial'   ? ' active' : '' ?>" href="?tab=editorial">📰 Editorial</a>
+    </div>
+    
+    <div class="archive-filters">
+        <a href="?tab=<?= $tab ?>&date=<?= $today ?>" class="archive-filter <?= $reqDate==$today?'active':'' ?>">Today</a>
+        <a href="?tab=<?= $tab ?>&date=<?= $yesterday ?>" class="archive-filter <?= $reqDate==$yesterday?'active':'' ?>">Yesterday</a>
+        <input type="date" class="date-picker" value="<?= $reqDate ?>" max="<?= $today ?>" onchange="location.href='?tab=<?= $tab ?>&date='+this.value">
     </div>
 
-    <?php if ($tab === 'quiz' || $tab === 'media'): ?>
-      <?php if (!$mcq): ?>
-        <p style="color:var(--muted);padding:2rem 0">Today's quiz is being prepared — generated daily at 6:30 AM. Check back soon.</p>
-      <?php else:
-        $payload = json_decode($mcq['payload'], true) ?: [];
-        $questions = $payload['questions'] ?? [];
-      ?>
-        <h3 style="font-family:var(--ff-display);margin:0 0 .25rem"><?= h($mcq['title']) ?></h3>
-        <p class="mono" style="color:var(--muted);font-size:var(--fs-xs);margin:0 0 1.5rem"><?= count($questions) ?> questions · attempt once · counts for leaderboard</p>
+    <?php /* ── QUIZ TAB ── */ if ($tab === 'quiz' || $tab === 'media'): ?>
 
-        <?php if (!$user): ?>
-          <div class="auth-card" style="max-width:480px">
-            <p style="margin:0 0 1rem;color:var(--text-soft)">Log in to attempt the quiz and appear on the leaderboard.</p>
-            <a class="btn btn-primary btn-block" href="/login.php?next=<?= urlencode('/students.php?tab=' . $tab) ?>">Log in with Telegram →</a>
+      <?php if (!$quiz): ?>
+        <div style="padding:2.5rem 0">
+          <?php if ($genStatus && $genStatus['status'] === 'RUNNING'): ?>
+            <p style="color:var(--highlight)">⏳ The quiz for <?= $reqDate ?> is being generated right now... refresh in a moment.</p>
+          <?php elseif ($genStatus && $genStatus['status'] === 'FAILED'): ?>
+            <p style="color:var(--accent)">⚠️ The quiz generation for <?= $reqDate ?> failed. It will be retried automatically. Check back soon.</p>
+          <?php else: ?>
+            <p style="color:var(--muted)">No quiz found for <?= $reqDate ?>. Generated daily at 6:30 AM.</p>
+          <?php endif; ?>
+        </div>
+      <?php else: ?>
+        <h3 style="font-family:var(--ff-display);margin:0 0 .25rem"><?= h($quiz['title']) ?></h3>
+        <p class="mono" style="color:var(--muted);font-size:var(--fs-xs);margin:0 0 .5rem">
+          <?= count($questions) ?> questions · instantly evaluated
+        </p>
+        <p class="mono" style="color:var(--muted);font-size:var(--fs-xs);margin:0 0 1.5rem">
+          Generated by <?= h($quiz['model'] ?? $quiz['provider'] ?? 'AI') ?>
+        </p>
+
+        <?php if ($myAttempt): ?>
+          <!-- COMPLETED VIEW -->
+          <div class="flash flash-ok">
+            ✓ You scored <strong><?= (int)$myAttempt['score'] ?>/<?= (int)$myAttempt['total'] ?></strong>
+            (accuracy <?= number_format((float)$myAttempt['accuracy'], 1) ?>%
+            <?php if ($myAttempt['time_taken_sec']): ?>
+              · completed in <?= gmdate('i:s', (int)$myAttempt['time_taken_sec']) ?>
+            <?php endif; ?>)
+            — Answers revealed below.
           </div>
-        <?php elseif ($mcqAttempt): ?>
-          <div class="flash flash-ok">✓ You scored <strong><?= (int)$mcqAttempt['score'] ?>/<?= (int)$mcqAttempt['total'] ?></strong> on this quiz. New quiz drops tomorrow 6:30 AM. Review below.</div>
+          <div id="quiz" data-quiz-id="<?= (int)$quiz['id'] ?>" data-done="1">
+            <?php foreach ($questions as $i => $q): ?>
+              <div class="auth-card quiz-q" style="max-width:760px;margin-bottom:1rem" data-qi="<?= $i ?>">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+                  <span class="mono" style="color:var(--accent);font-size:var(--fs-xs)">Q<?= $i+1 ?></span>
+                  <div style="display:flex;gap:.4rem">
+                    <span class="badge badge-off"><?= h($q['topic']) ?></span>
+                    <span class="badge badge-off" style="text-transform:capitalize"><?= h($q['difficulty']) ?></span>
+                  </div>
+                </div>
+                <p style="margin:0 0 1rem;font-weight:600"><?= h($q['question']) ?></p>
+                <?php foreach (['a','b','c','d'] as $opt): ?>
+                  <button class="action-btn opt" data-opt="<?= strtoupper($opt) ?>" type="button" style="display:flex;width:100%;text-align:left;margin-bottom:.5rem;justify-content:flex-start" disabled>
+                    <span class="mono" style="color:var(--muted);min-width:1.6rem"><?= strtoupper($opt) ?>.</span>
+                    <?= h($q['option_'.$opt]) ?>
+                  </button>
+                <?php endforeach; ?>
+                <div style="margin-top:.75rem;padding:.75rem 1rem;background:var(--surface2);border-radius:8px;font-size:var(--fs-sm);color:var(--text-soft)">
+                  ✅ Correct: <strong><?= h($q['correct_option']) ?></strong> &mdash; <?= h($q['option_'.strtolower($q['correct_option'])]) ?><br>
+                  💡 <?= h($q['explanation']) ?>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+
+        <?php else: ?>
+          <!-- ASPIRANT TAKING TEST VIEW (Anyone) -->
+          <div id="quiz-landing" class="auth-card" style="max-width:500px;text-align:center;padding:3rem 2rem;margin:2rem auto">
+            <h2 style="font-family:var(--ff-display);margin:0 0 .5rem">Ready to begin?</h2>
+            <p style="color:var(--text-soft);margin:0 0 2rem">This is a strict <?= count($questions) ?>-question test. Once you click Start, the timer will begin.</p>
+            <button class="btn btn-primary" id="start-test-btn" type="button" style="padding:1rem 3rem;font-size:1.2rem">Start Test</button>
+          </div>
+
+          <div id="quiz-timer" style="display:none;position:sticky;top:60px;z-index:100;background:var(--surface);border-bottom:1px solid var(--border);padding:.75rem;text-align:center;font-weight:700;font-size:1.2rem;color:var(--highlight);margin:0 -1rem 1rem">
+            ⏱️ <span id="timer-display">00:00</span>
+          </div>
+
+          <div id="quiz" data-quiz-id="<?= (int)$quiz['id'] ?>" data-done="0" style="display:none">
+            <div id="quiz-result" class="flash flash-ok" style="display:none;margin-bottom:1.5rem;font-size:1.1rem;padding:1.5rem;text-align:center"></div>
+
+            <?php foreach ($questions as $i => $q): ?>
+              <div class="auth-card quiz-q" style="max-width:760px;margin-bottom:1rem" data-qi="<?= $i ?>">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+                  <span class="mono" style="color:var(--accent);font-size:var(--fs-xs)">Q<?= $i+1 ?></span>
+                  <div style="display:flex;gap:.4rem">
+                    <span class="badge badge-off"><?= h($q['topic']) ?></span>
+                    <span class="badge badge-off" style="text-transform:capitalize"><?= h($q['difficulty']) ?></span>
+                  </div>
+                </div>
+                <p style="margin:0 0 1rem;font-weight:600"><?= h($q['question']) ?></p>
+                <?php foreach (['a','b','c','d'] as $opt): ?>
+                  <button class="action-btn opt" data-opt="<?= strtoupper($opt) ?>" type="button" style="display:flex;width:100%;text-align:left;margin-bottom:.5rem;justify-content:flex-start">
+                    <span class="mono" style="color:var(--muted);min-width:1.6rem"><?= strtoupper($opt) ?>.</span>
+                    <?= h($q['option_'.$opt]) ?>
+                  </button>
+                <?php endforeach; ?>
+                <div class="explain" style="display:none;margin-top:.75rem;padding:.75rem 1rem;background:var(--surface2);border-radius:8px;font-size:var(--fs-sm);color:var(--text-soft)"></div>
+              </div>
+            <?php endforeach; ?>
+
+            <button class="btn btn-primary" id="submit-quiz" type="button" style="margin-top:1rem;padding:1rem 2rem;font-size:1.1rem;width:100%;max-width:760px">Submit Test</button>
+          </div>
         <?php endif; ?>
 
-        <div id="quiz" data-content-id="<?= (int)$mcq['id'] ?>" data-done="<?= $mcqAttempt ? 1 : 0 ?>" data-auth="<?= $user ? 1 : 0 ?>">
-          <?php foreach ($questions as $i => $q): ?>
-            <div class="auth-card quiz-q" style="max-width:760px;margin-bottom:1rem" data-qi="<?= $i ?>">
-              <div style="display:flex;justify-content:space-between;margin-bottom:.75rem">
-                <span class="mono" style="color:var(--accent);font-size:var(--fs-xs)">Q<?= $i+1 ?></span>
-                <span class="badge badge-off"><?= h($q['topic'] ?? 'GK') ?></span>
-              </div>
-              <p style="margin:0 0 1rem;font-weight:600"><?= h($q['q'] ?? '') ?></p>
-              <?php foreach (($q['options'] ?? []) as $oi => $opt): ?>
-                <button class="action-btn opt" data-oi="<?= $oi ?>" type="button"
-                        style="display:flex;width:100%;text-align:left;margin-bottom:.5rem;justify-content:flex-start">
-                  <span class="mono" style="color:var(--muted)"><?= chr(65+$oi) ?>.</span>&nbsp; <?= h($opt) ?>
-                </button>
-              <?php endforeach; ?>
-              <div class="explain" style="display:none;margin-top:.75rem;padding:.75rem 1rem;background:var(--surface2);border-radius:8px;font-size:var(--fs-sm);color:var(--text-soft)"></div>
-            </div>
-          <?php endforeach; ?>
-
-          <?php if ($user && !$mcqAttempt): ?>
-            <button class="btn btn-primary" id="submit-quiz" type="button" style="margin-top:.5rem">Submit answers</button>
-          <?php endif; ?>
-          <div id="quiz-result" class="flash flash-ok" style="display:none;margin-top:1rem"></div>
-        </div>
-
-        <script>
-        (function(){
-          var box = document.getElementById('quiz');
-          var done = box.getAttribute('data-done') === '1';
-          var auth = box.getAttribute('data-auth') === '1';
-          var picks = {};
-
-          document.querySelectorAll('.quiz-q').forEach(function(qel){
-            var qi = +qel.getAttribute('data-qi');
-            qel.querySelectorAll('.opt').forEach(function(btn){
-              btn.addEventListener('click', function(){
-                if (done) return;
-                qel.querySelectorAll('.opt').forEach(function(b){ b.classList.remove('liked'); });
-                btn.classList.add('liked');
-                picks[qi] = +btn.getAttribute('data-oi');
-              });
-            });
-          });
-
-          var submit = document.getElementById('submit-quiz');
-          if (submit) submit.addEventListener('click', function(){
-            var total = document.querySelectorAll('.quiz-q').length;
-            var answers = [];
-            for (var i = 0; i < total; i++) answers.push(picks.hasOwnProperty(i) ? picks[i] : -1);
-            submit.disabled = true; submit.textContent = 'Scoring…';
-            fetch('/api/quiz-attempt.php', {
-              method:'POST', headers:{'Content-Type':'application/json'},
-              body: JSON.stringify({ content_id: +box.getAttribute('data-content-id'), answers: answers })
-            }).then(r=>r.json()).then(function(d){
-              if (!d.ok) { alert('Failed: ' + (d.error||'')); submit.disabled = false; submit.textContent = 'Submit answers'; return; }
-              done = true;
-              var res = document.getElementById('quiz-result');
-              res.textContent = '🎯 Score: ' + d.score + '/' + d.total + ' — answers & explanations revealed below.';
-              res.style.display = 'block';
-              submit.style.display = 'none';
-              document.querySelectorAll('.quiz-q').forEach(function(qel, i){
-                var r = d.results[i]; if (!r) return;
-                qel.querySelectorAll('.opt').forEach(function(b){
-                  var oi = +b.getAttribute('data-oi');
-                  if (oi === r.answer) { b.style.borderColor = '#00D4AA'; b.style.background = 'color-mix(in srgb,#00D4AA 15%, transparent)'; }
-                  else if (picks[i] === oi && !r.correct) { b.style.borderColor = 'var(--accent)'; }
-                });
-                var ex = qel.querySelector('.explain');
-                if (r.explanation) { ex.textContent = '💡 ' + r.explanation; ex.style.display = 'block'; }
-              });
-              window.scrollTo({top: res.offsetTop - 100, behavior:'smooth'});
-            });
-          });
-        })();
-        </script>
+        <?php if (!empty($sourceArticles)): ?>
+          <div style="margin-top:2rem">
+            <h4 style="font-size:var(--fs-sm);color:var(--muted);margin:0 0 .75rem">📰 Source Articles</h4>
+            <?php foreach ($sourceArticles as $sa): ?>
+              <a href="/article.php?id=<?= (int)$sa['id'] ?>" style="display:block;font-size:var(--fs-sm);color:var(--accent);margin-bottom:.4rem;text-decoration:none">
+                → <?= h($sa['title']) ?>
+              </a>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
       <?php endif; ?>
 
-    <?php elseif ($tab === 'mains'): ?>
+      <script>
+      (function(){
+        var box   = document.getElementById('quiz');
+        if (!box) return;
+        var done  = box.getAttribute('data-done') === '1';
+        var picks = {};
+        
+        var timerInterval = null;
+        var startTime     = 0;
+        var timerDisplay  = document.getElementById('timer-display');
+        var timerBar      = document.getElementById('quiz-timer');
+        var startBtn      = document.getElementById('start-test-btn');
+        var landing       = document.getElementById('quiz-landing');
+
+        function formatTime(sec) {
+          var m = Math.floor(sec / 60);
+          var s = sec % 60;
+          return (m < 10 ? '0'+m : m) + ':' + (s < 10 ? '0'+s : s);
+        }
+
+        if (startBtn) {
+          startBtn.addEventListener('click', function(){
+            landing.style.display = 'none';
+            box.style.display = 'block';
+            timerBar.style.display = 'block';
+            startTime = Date.now();
+            timerInterval = setInterval(function(){
+              var elapsed = Math.floor((Date.now() - startTime) / 1000);
+              timerDisplay.textContent = formatTime(elapsed);
+            }, 1000);
+          });
+        }
+
+        document.querySelectorAll('.quiz-q').forEach(function(qel){
+          var qi = +qel.getAttribute('data-qi');
+          qel.querySelectorAll('.opt').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              if (done) return;
+              qel.querySelectorAll('.opt').forEach(function(b){ b.classList.remove('liked'); });
+              btn.classList.add('liked');
+              picks[qi] = btn.getAttribute('data-opt');
+            });
+          });
+        });
+
+        var submit = document.getElementById('submit-quiz');
+        if (submit) submit.addEventListener('click', function(){
+          if (timerInterval) clearInterval(timerInterval);
+          var total   = document.querySelectorAll('.quiz-q').length;
+          var answers = [];
+          for (var i = 0; i < total; i++) answers.push(picks[i] || null);
+          var timeTaken = Math.floor((Date.now() - startTime) / 1000);
+          
+          submit.disabled = true; submit.textContent = 'Scoring…';
+          fetch('/api/quiz-attempt.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              quiz_id:        +box.getAttribute('data-quiz-id'),
+              answers:        answers,
+              time_taken_sec: timeTaken
+            })
+          }).then(r=>r.json()).then(function(d){
+            if (!d.ok){ alert('Failed: '+(d.error||'')); submit.disabled=false; submit.textContent='Submit Test'; return; }
+            done = true;
+            if (timerBar) timerBar.style.display = 'none';
+            var res = document.getElementById('quiz-result');
+            var correctCount = 0, incorrectCount = 0, skippedCount = 0;
+            d.results.forEach(function(r, i){
+                if (!r) return;
+                var myPick = picks[i];
+                if (r.correct) correctCount++;
+                else if (!myPick) skippedCount++;
+                else incorrectCount++;
+            });
+            var attemptedCount = d.total - skippedCount;
+
+            var statsHtml = '<div style="display:flex;justify-content:center;gap:1.5rem;margin:1rem 0;font-size:0.95rem;flex-wrap:wrap">' +
+                '<div><span style="color:var(--text-soft)">Attempted:</span> <strong>' + attemptedCount + '</strong></div>' +
+                '<div><span style="color:#00D4AA">Correct:</span> <strong>' + correctCount + '</strong></div>' +
+                '<div><span style="color:var(--accent)">Incorrect:</span> <strong>' + incorrectCount + '</strong></div>' +
+                '<div><span style="color:var(--muted)">Skipped:</span> <strong>' + skippedCount + '</strong></div>' +
+                '</div>';
+
+            res.innerHTML = '<div style="font-size:2.5rem;margin-bottom:0.5rem">🎯 <strong>'+d.score+'/'+d.total+'</strong></div>' +
+                            '<div style="font-size:1.1rem">Accuracy: <strong>'+d.accuracy+'%</strong> &nbsp;•&nbsp; Time: <strong>'+formatTime(timeTaken)+'</strong></div>' +
+                            statsHtml + 
+                            '<div style="margin-top:0.5rem;font-size:0.95rem;opacity:0.8;border-top:1px solid var(--border);padding-top:1rem">Review your answers below.</div>';
+            res.style.display = 'block';
+            submit.style.display = 'none';
+            document.querySelectorAll('.quiz-q').forEach(function(qel, i){
+              var r = d.results[i]; if (!r) return;
+              var myPick = picks[i];
+              qel.querySelectorAll('.opt').forEach(function(b){
+                var opt = b.getAttribute('data-opt');
+                if (opt === r.answer){ b.style.borderColor='#00D4AA'; b.style.background='color-mix(in srgb,#00D4AA 15%,transparent)'; }
+                else if (myPick === opt && opt !== r.answer){ b.style.borderColor='var(--accent)'; }
+              });
+              var ex = qel.querySelector('.explain');
+              if (ex && r.explanation){ 
+                  var ptext = 'Your Answer: ' + (myPick ? myPick : 'Skipped') + ' &nbsp;|&nbsp; Correct Answer: ' + r.answer;
+                  var htext;
+                  if (r.correct) htext = '<span style="color:#00D4AA">✅ Correct</span>';
+                  else if (!myPick) htext = '<span style="color:var(--muted)">⚠️ Skipped</span>';
+                  else htext = '<span style="color:var(--accent)">❌ Incorrect</span>';
+                  
+                  ex.innerHTML = htext + '<br><strong style="color:var(--text)">' + ptext + '</strong><br><br>💡 '+r.explanation; 
+                  ex.style.display='block'; 
+              }
+            });
+            window.scrollTo({top: box.offsetTop - 100, behavior:'smooth'});
+          });
+        });
+      })();
+      </script>
+
+    <?php /* ── MAINS TAB ── */ elseif ($tab === 'mains'): ?>
       <?php if (!$mains): ?>
-        <p style="color:var(--muted);padding:2rem 0">Today's Mains questions are being prepared. Generated daily 6:30 AM.</p>
-      <?php else:
-        $payload = json_decode($mains['payload'], true) ?: [];
-      ?>
-        <h3 style="font-family:var(--ff-display);margin:0 0 1.5rem"><?= h($mains['title']) ?></h3>
-        <?php foreach (($payload['questions'] ?? []) as $i => $q): ?>
+        <p style="color:var(--muted);padding:2rem 0">
+          <?= $genStatus && $genStatus['status']==='FAILED'
+              ? "⚠️ Generation for $reqDate failed. Will retry automatically."
+              : "Mains questions for $reqDate are not available." ?>
+        </p>
+      <?php else: ?>
+        <h3 style="font-family:var(--ff-display);margin:0 0 1.5rem">Mains Practice — <?= date('d M Y', strtotime($reqDate)) ?></h3>
+        <?php foreach ($mains as $i => $mq): ?>
           <div class="auth-card" style="max-width:760px;margin-bottom:1.25rem">
             <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
-              <span class="badge badge-admin"><?= h($q['paper'] ?? 'GS') ?></span>
+              <span class="badge badge-admin"><?= h($mq['paper']) ?></span>
               <span class="badge badge-off">150–250 words</span>
             </div>
-            <p style="font-weight:600;font-size:var(--fs-lg);margin:0 0 .75rem">Q<?= $i+1 ?>. <?= h($q['q'] ?? '') ?></p>
-            <?php if (!empty($q['hint'])): ?>
-              <p style="color:var(--muted);font-size:var(--fs-sm);margin:0 0 1rem">💭 Approach: <?= h($q['hint']) ?></p>
+            <p style="font-weight:600;font-size:var(--fs-lg);margin:0 0 .75rem">Q<?= $i+1 ?>. <?= h($mq['question']) ?></p>
+            <?php if ($mq['hint']): ?>
+              <p style="color:var(--muted);font-size:var(--fs-sm);margin:0 0 1rem">💭 Approach: <?= h($mq['hint']) ?></p>
             <?php endif; ?>
             <details>
               <summary style="cursor:pointer;color:var(--accent);font-weight:600">Reveal model answer points</summary>
               <ul style="margin:.75rem 0 0;color:var(--text-soft)">
-                <?php foreach (($q['points'] ?? []) as $pt): ?>
+                <?php foreach ($mq['points'] as $pt): ?>
                   <li style="margin-bottom:.4rem"><?= h($pt) ?></li>
                 <?php endforeach; ?>
               </ul>
@@ -187,79 +449,73 @@ include __DIR__ . '/includes/header.php';
         <p style="color:var(--muted);font-size:var(--fs-sm)">✍️ Tip: write your answer on paper first, THEN reveal the points. Compare honestly.</p>
       <?php endif; ?>
 
-    <?php elseif ($tab === 'editorial'): ?>
+    <?php /* ── EDITORIAL TAB ── */ elseif ($tab === 'editorial'): ?>
       <?php if (!$editorial): ?>
-        <p style="color:var(--muted);padding:2rem 0">Today's editorial analysis is being prepared. Generated daily 6:30 AM.</p>
-      <?php else:
-        $e = json_decode($editorial['payload'], true) ?: [];
-      ?>
+        <p style="color:var(--muted);padding:2rem 0">
+          <?= $genStatus && $genStatus['status']==='FAILED'
+              ? "⚠️ Generation for $reqDate failed. Will retry automatically."
+              : "Editorial analysis for $reqDate is not available." ?>
+        </p>
+      <?php else: ?>
         <div class="auth-card" style="max-width:780px">
-          <span class="badge badge-admin">EDITORIAL ANALYSIS</span>
-          <h3 style="font-family:var(--ff-display);font-size:var(--fs-xl);margin:.75rem 0 1rem"><?= h($e['title'] ?? $editorial['title']) ?></h3>
+          <span class="badge badge-admin">EDITORIAL ANALYSIS — <?= date('d M Y', strtotime($reqDate)) ?></span>
+          <h3 style="font-family:var(--ff-display);font-size:var(--fs-xl);margin:.75rem 0 1rem"><?= h($editorial['title']) ?></h3>
 
-          <?php if (!empty($e['background'])): ?>
-            <h4 style="margin:1.25rem 0 .5rem;color:var(--accent)">Background</h4>
-            <p style="color:var(--text-soft);margin:0"><?= h($e['background']) ?></p>
-          <?php endif; ?>
+          <h4 style="margin:1.25rem 0 .5rem;color:var(--accent)">Background</h4>
+          <p style="color:var(--text-soft);margin:0"><?= h($editorial['background']) ?></p>
 
-          <?php if (!empty($e['key_points'])): ?>
+          <?php if ($ed_points['key_point']): ?>
             <h4 style="margin:1.25rem 0 .5rem;color:var(--accent)">Key Points</h4>
             <ul style="color:var(--text-soft);margin:0">
-              <?php foreach ($e['key_points'] as $p): ?><li style="margin-bottom:.35rem"><?= h($p) ?></li><?php endforeach; ?>
+              <?php foreach ($ed_points['key_point'] as $p): ?>
+                <li style="margin-bottom:.35rem"><?= h($p) ?></li>
+              <?php endforeach; ?>
             </ul>
           <?php endif; ?>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.25rem" class="ed-grid">
             <style>@media(max-width:640px){.ed-grid{grid-template-columns:1fr !important}}</style>
-            <?php if (!empty($e['arguments_for'])): ?>
+            <?php if ($ed_points['arg_for']): ?>
               <div style="background:color-mix(in srgb,#00D4AA 8%,transparent);border:1px solid #00D4AA;border-radius:8px;padding:1rem">
                 <h4 style="margin:0 0 .5rem;color:#00D4AA">✓ Arguments For</h4>
                 <ul style="margin:0;color:var(--text-soft);font-size:var(--fs-sm)">
-                  <?php foreach ($e['arguments_for'] as $p): ?><li style="margin-bottom:.3rem"><?= h($p) ?></li><?php endforeach; ?>
+                  <?php foreach ($ed_points['arg_for'] as $p): ?>
+                    <li style="margin-bottom:.3rem"><?= h($p) ?></li>
+                  <?php endforeach; ?>
                 </ul>
               </div>
             <?php endif; ?>
-            <?php if (!empty($e['arguments_against'])): ?>
+            <?php if ($ed_points['arg_against']): ?>
               <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;padding:1rem">
                 <h4 style="margin:0 0 .5rem;color:var(--accent)">✗ Arguments Against</h4>
                 <ul style="margin:0;color:var(--text-soft);font-size:var(--fs-sm)">
-                  <?php foreach ($e['arguments_against'] as $p): ?><li style="margin-bottom:.3rem"><?= h($p) ?></li><?php endforeach; ?>
+                  <?php foreach ($ed_points['arg_against'] as $p): ?>
+                    <li style="margin-bottom:.3rem"><?= h($p) ?></li>
+                  <?php endforeach; ?>
                 </ul>
               </div>
             <?php endif; ?>
           </div>
 
-          <?php if (!empty($e['exam_relevance'])): ?>
-            <h4 style="margin:1.25rem 0 .5rem;color:var(--highlight)">🎯 Exam Relevance</h4>
-            <p style="color:var(--text-soft);margin:0"><?= h($e['exam_relevance']) ?></p>
-          <?php endif; ?>
+          <h4 style="margin:1.25rem 0 .5rem;color:var(--highlight)">🎯 Exam Relevance</h4>
+          <p style="color:var(--text-soft);margin:0"><?= h($editorial['exam_relevance']) ?></p>
 
-          <?php if (!empty($e['conclusion'])): ?>
-            <h4 style="margin:1.25rem 0 .5rem;color:var(--accent)">Conclusion</h4>
-            <p style="color:var(--text-soft);margin:0"><?= h($e['conclusion']) ?></p>
+          <h4 style="margin:1.25rem 0 .5rem;color:var(--accent)">Conclusion</h4>
+          <p style="color:var(--text-soft);margin:0"><?= h($editorial['conclusion']) ?></p>
+
+          <?php if (!empty($sourceArticles)): ?>
+            <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
+              <h4 style="font-size:var(--fs-sm);color:var(--muted);margin:0 0 .75rem">📰 Source Articles</h4>
+              <?php foreach ($sourceArticles as $sa): ?>
+                <a href="/article.php?id=<?= (int)$sa['id'] ?>" style="display:block;font-size:var(--fs-sm);color:var(--accent);margin-bottom:.4rem;text-decoration:none">
+                  → <?= h($sa['title']) ?>
+                </a>
+              <?php endforeach; ?>
+            </div>
           <?php endif; ?>
         </div>
       <?php endif; ?>
 
-    <?php elseif ($tab === 'leaderboard'): ?>
-      <h3 style="font-family:var(--ff-display);margin:0 0 1.25rem">🏆 This week's toppers</h3>
-      <?php if (!$leaders): ?>
-        <p style="color:var(--muted)">No attempts yet this week. Be the first — take today's quiz!</p>
-      <?php else: ?>
-        <div class="table-scroll"><table class="admin-table" style="max-width:640px">
-          <thead><tr><th>#</th><th>Aspirant</th><th>Points</th><th>Quizzes</th></tr></thead>
-          <tbody>
-          <?php foreach ($leaders as $i => $L): ?>
-            <tr>
-              <td class="mono"><?= $i < 3 ? ['🥇','🥈','🥉'][$i] : $i+1 ?></td>
-              <td><?= h($L['display_name'] ?: $L['first_name'] ?: 'Eagle Aspirant') ?></td>
-              <td class="mono" style="font-weight:700"><?= (int)$L['pts'] ?></td>
-              <td class="mono"><?= (int)$L['quizzes'] ?></td>
-            </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table></div>
-      <?php endif; ?>
     <?php endif; ?>
 
   </div>
