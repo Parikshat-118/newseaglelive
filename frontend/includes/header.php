@@ -43,9 +43,7 @@ try {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+Devanagari:wght@500;700&display=swap" rel="stylesheet">
-
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230A0E1A'/%3E%3Cpath d='M16 5 L26 13 L21 17 L26 24 L16 21 L6 24 L11 17 L6 13 Z' fill='%23E8504C'/%3E%3C/svg%3E">
-
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
 /* ═══ TOKENS ═══ */
 :root,[data-theme="dark"]{
