@@ -8,6 +8,9 @@ RewriteEngine On
 RewriteRule ^newseagle/?$    /        [R=301,L]
 RewriteRule ^newseagle/(.*)$ /$1      [R=301,L]
 
+# Sitemap rewrite
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+
 # Block direct access to includes
 <FilesMatch "^(bootstrap|config|header|footer)\.php$">
   Require all denied
