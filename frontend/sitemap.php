@@ -43,6 +43,39 @@ try {
         echo "\n    <priority>0.6</priority>";
         echo "\n  </url>";
     }
+
+    // 3. Historical UPSC & Media Quizzes
+    $stmt = $db->query("SELECT quiz_date, exam_type FROM daily_quizzes ORDER BY quiz_date DESC");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $tab = $row['exam_type'] === 'media' ? 'media' : 'quiz';
+        echo "\n  <url>";
+        echo "\n    <loc>" . htmlspecialchars($baseUrl . '/students.php?tab=' . $tab . '&date=' . $row['quiz_date']) . "</loc>";
+        echo "\n    <changefreq>never</changefreq>";
+        echo "\n    <priority>0.7</priority>";
+        echo "\n  </url>";
+    }
+
+    // 4. Historical Editorials
+    $stmt = $db->query("SELECT editorial_date FROM daily_editorials ORDER BY editorial_date DESC");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        // editorial_date might be DATETIME, let's just grab the Y-m-d part
+        $ed_date = substr($row['editorial_date'], 0, 10);
+        echo "\n  <url>";
+        echo "\n    <loc>" . htmlspecialchars($baseUrl . '/students.php?tab=editorial&date=' . $ed_date) . "</loc>";
+        echo "\n    <changefreq>never</changefreq>";
+        echo "\n    <priority>0.7</priority>";
+        echo "\n  </url>";
+    }
+
+    // 5. Historical Mains Practice
+    $stmt = $db->query("SELECT DISTINCT DATE(mains_date) as m_date FROM daily_mains_questions ORDER BY m_date DESC");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        echo "\n  <url>";
+        echo "\n    <loc>" . htmlspecialchars($baseUrl . '/students.php?tab=mains&date=' . $row['m_date']) . "</loc>";
+        echo "\n    <changefreq>never</changefreq>";
+        echo "\n    <priority>0.7</priority>";
+        echo "\n  </url>";
+    }
 } catch (Exception $e) {
     // Ignore errors to ensure core sitemap still generates
 }

@@ -49,17 +49,17 @@ def start_scheduler(app: Application) -> AsyncIOScheduler:
         id="refresh_trending", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_morning_digest, CronTrigger(hour=settings.morning_digest_hour, minute=0),
+        J.job_morning_digest, CronTrigger(hour=settings.morning_digest_hour, minute=0, timezone=tzinfo),
         args=[bot], id="morning_digest",
         max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_evening_digest, CronTrigger(hour=settings.evening_digest_hour, minute=0),
+        J.job_evening_digest, CronTrigger(hour=settings.evening_digest_hour, minute=0, timezone=tzinfo),
         args=[bot], id="evening_digest",
         max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_generate_quizzes, CronTrigger(hour=6, minute=0),
+        J.job_generate_quizzes, CronTrigger(hour=6, minute=0, timezone=tzinfo),
         id="daily_quiz", max_instances=1, coalesce=True, replace_existing=True,
     )
 
@@ -85,23 +85,23 @@ def start_scheduler(app: Application) -> AsyncIOScheduler:
         id="warmeter", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_generate_upsc, CronTrigger(hour=6, minute=30),
+        J.job_generate_upsc, CronTrigger(hour=6, minute=30, timezone=tzinfo),
         id="gen_upsc", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_generate_media, CronTrigger(hour=6, minute=35),
+        J.job_generate_media, CronTrigger(hour=6, minute=35, timezone=tzinfo),
         id="gen_media", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_generate_editorial, CronTrigger(hour=6, minute=40),
+        J.job_generate_editorial, CronTrigger(hour=6, minute=40, timezone=tzinfo),
         id="gen_editorial", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_generate_mains, CronTrigger(hour=6, minute=45),
+        J.job_generate_mains, CronTrigger(hour=6, minute=45, timezone=tzinfo),
         id="gen_mains", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
-        J.job_student_recovery, CronTrigger(hour=8, minute=0),
+        J.job_student_recovery, CronTrigger(hour=8, minute=0, timezone=tzinfo),
         id="gen_recovery", max_instances=1, coalesce=True, replace_existing=True,
     )
 
