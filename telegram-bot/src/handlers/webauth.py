@@ -53,55 +53,88 @@ def _normalize_mobile(raw: str) -> str | None:
 
 
 # ---------------------------------------------------------------------
-# /setmobile
+from telegram.ext import ConversationHandler
+
+WAITING_FOR_MOBILE = 1
+
+# ---------------------------------------------------------------------
+# /setmobile (Conversation)
 # ---------------------------------------------------------------------
 @rate_limited(limit=5, window=60, bucket="setmobile")
-async def cmd_setmobile(upd: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_setmobile_start(upd: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not upd.message or not upd.effective_user:
-        return
-
-    args = context.args or []
-    if not args:
-        await upd.message.reply_text(
-            "📱 *Set your mobile number*\n\n"
-            "Send: `/setmobile <your 10-digit Indian mobile>`\n"
-            "Example: `/setmobile 9876543210`\n\n"
-            "Needed for web login at News Eagle Live.",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        return
-
-    mobile = _normalize_mobile(" ".join(args))
-    if not mobile:
-        await upd.message.reply_text(
-            "❌ Invalid mobile. Send 10 digits starting with 6/7/8/9.",
-        )
-        return
+        return ConversationHandler.END
 
     with session_scope() as s:
+        u = s.scalar(select(User).where(User.telegram_id == upd.effective_user.id))
+        if not u:
+            await upd.message.reply_text("Run /start first.")
+            return ConversationHandler.END
+
+        if u.mobile_number:
+            masked = u.mobile_number[:2] + "******" + u.mobile_number[-2:]
+            msg = (
+                f"📱 *Link your News Eagle account.*\n\n"
+                f"Current number: `{masked}`\n\n"
+                "Would you like to replace it? Please enter your new *10-digit Indian mobile number*.\n"
+                "Or type /cancel to keep your current number."
+            )
+        else:
+            msg = (
+                "📱 *Link your News Eagle account.*\n\n"
+                "Please enter your *10-digit Indian mobile number*.\n"
+                "You can type /cancel anytime to abort."
+            )
+
+    await upd.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+    return WAITING_FOR_MOBILE
+
+async def process_mobile_input(upd: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not upd.message or not upd.message.text:
+        return WAITING_FOR_MOBILE
+    
+    text_input = upd.message.text.strip()
+    mobile = _normalize_mobile(text_input)
+    
+    if not mobile:
+        await upd.message.reply_text(
+            "❌ Invalid format.\n"
+            "Please send a valid 10-digit mobile number (e.g., 9876543210) or type /cancel."
+        )
+        return WAITING_FOR_MOBILE
+
+    with session_scope() as s:
+        # Check for duplicates
         existing = s.scalar(select(User).where(User.mobile_number == mobile))
         if existing and existing.telegram_id != upd.effective_user.id:
             await upd.message.reply_text(
-                "⚠️ That mobile is already linked to another account."
+                "⚠️ That mobile is already linked to another account.\n"
+                "Please enter a different number, or type /cancel."
             )
-            return
+            return WAITING_FOR_MOBILE
 
         u = s.scalar(select(User).where(User.telegram_id == upd.effective_user.id))
         if not u:
             await upd.message.reply_text("Run /start first.")
-            return
+            return ConversationHandler.END
 
-        u.mobile_number   = mobile
+        u.mobile_number = mobile
         u.mobile_verified = True
         if mobile == SUPER_ADMIN_MOBILE:
             u.is_admin = True
 
     extra = "\n👑 You are now Super Admin." if mobile == SUPER_ADMIN_MOBILE else ""
     await upd.message.reply_text(
-        f"✅ Mobile saved: *+91 {mobile}*{extra}\n"
-        "Use /webauth to log in to the website.",
+        f"✅ *Mobile number linked successfully.*\n"
+        f"Your saved number is: *+91 {mobile}*{extra}\n\n"
+        "You can now log in to News Eagle using Telegram! Send /webauth for a login code.",
         parse_mode=ParseMode.MARKDOWN,
     )
+    return ConversationHandler.END
+
+async def cancel_setmobile(upd: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await upd.message.reply_text("❌ Mobile linking cancelled.")
+    return ConversationHandler.END
 
 
 # ---------------------------------------------------------------------
@@ -115,7 +148,7 @@ async def cmd_mymobile(upd: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         u = s.scalar(select(User).where(User.telegram_id == upd.effective_user.id))
         if not u or not u.mobile_number:
             await upd.message.reply_text(
-                "📱 No mobile linked. Use `/setmobile <number>`.",
+                "📱 No mobile linked. Use /setmobile to link your mobile number.",
                 parse_mode=ParseMode.MARKDOWN,
             )
             return
@@ -142,7 +175,7 @@ async def cmd_webauth(upd: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
         if not u.mobile_number or not u.mobile_verified:
             await upd.message.reply_text(
-                "📱 Link a mobile first: `/setmobile <number>`",
+                "📱 Link a mobile first using /setmobile.",
                 parse_mode=ParseMode.MARKDOWN,
             )
             return

@@ -32,9 +32,19 @@ include __DIR__ . '/includes/header.php';
     <p style="max-width:62ch;color:var(--text-soft);margin:-1.5rem 0 2.5rem">
       Our AI scans incoming news every 30 minutes for severe location-specific events —
       cyclones, heatwaves, floods, disease outbreaks, security incidents.
-      Bot users with a PIN code set get these pushed automatically on Telegram.
-      Set yours: <span class="mono">/setpincode</span> on
-      <a href="<?= h($CONFIG['brand']['bot_url']) ?>" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">@<?= h($CONFIG['brand']['bot']) ?></a>.
+      
+      <?php 
+      $currentUser = ne_current_user();
+      if ($currentUser && !empty($currentUser['pincode'])): 
+      ?>
+        <br><br>
+        📍 Your current alert location is set to <strong><?= h($currentUser['district'] ? $currentUser['district'] . ', ' . $currentUser['state'] : 'PIN ' . $currentUser['pincode']) ?></strong>.
+        You can change this in your <a href="/account.php" style="color:var(--accent);text-decoration:underline">Account Dashboard</a>.
+      <?php else: ?>
+        Users with a PIN code set get these pushed automatically on Telegram.
+        Set yours via your <a href="/account.php" style="color:var(--accent);text-decoration:underline">Account Dashboard</a> or by typing <span class="mono">/setpincode</span> on
+        <a href="<?= h($CONFIG['brand']['bot_url']) ?>" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">@<?= h($CONFIG['brand']['bot']) ?></a>.
+      <?php endif; ?>
     </p>
 
     <?php if (empty($alerts)): ?>

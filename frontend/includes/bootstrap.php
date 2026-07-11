@@ -95,10 +95,15 @@ function ne_current_user(): ?array {
         $row->execute([':t' => $token]);
         $u = $row->fetch() ?: null;
         if ($u) {
-            // touch last_seen_at (best effort)
+            // touch last_seen_at (best effort) and refresh sliding session
             try {
-                $db->prepare("UPDATE web_sessions SET last_seen_at = NOW() WHERE token = :t")
-                   ->execute([':t' => $token]);
+                global $CONFIG;
+                $hrs = $CONFIG['session']['lifetime_hours'];
+                $db->prepare("UPDATE web_sessions SET last_seen_at = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL :hrs HOUR) WHERE token = :t")
+                   ->execute([':t' => $token, ':hrs' => $hrs]);
+                
+                // Refresh the cookie expiry on the client
+                ne_set_session_cookie($token);
             } catch (Throwable $e) {}
         }
         return $cache = $u;

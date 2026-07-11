@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ContextTypes, filters,
+    ConversationHandler, ContextTypes, filters,
 )
 
 from src.handlers import (
@@ -44,7 +44,14 @@ def register_all_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("chat", chat.cmd_chat))
 
     # --- Web-app bridge (Telegram-OTP login + mobile binding) ---
-    app.add_handler(CommandHandler("setmobile", webauth.cmd_setmobile))
+    app.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("setmobile", webauth.cmd_setmobile_start)],
+        states={
+            webauth.WAITING_FOR_MOBILE: [MessageHandler(filters.TEXT & ~filters.COMMAND, webauth.process_mobile_input)]
+        },
+        fallbacks=[CommandHandler("cancel", webauth.cancel_setmobile)],
+        per_message=False,
+    ))
     app.add_handler(CommandHandler("mymobile",  webauth.cmd_mymobile))
     app.add_handler(CommandHandler("webauth",   webauth.cmd_webauth))
     app.add_handler(CommandHandler("login",     webauth.cmd_webauth))  # alias
