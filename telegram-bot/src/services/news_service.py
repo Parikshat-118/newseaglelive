@@ -33,6 +33,7 @@ from src.services.source_adapters.gnews_adapter import GNewsAdapter
 from src.utils.cache import seen_article
 from src.utils.dedupe import canonical_url, url_hash
 from src.utils.logger import log
+from src.services.ai_provider import get_provider
 
 
 _adapters = [RSSAdapter(), NewsAPIAdapter(), GNewsAdapter()]
@@ -153,6 +154,9 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
                     image_url = None
                     stats["failed"] += 1
 
+        # Generate search tags via AI
+        search_tags = await _generate_search_tags(f.title, f.summary)
+
         final_rows.append(NewsArticle(
             url_hash=h,
             url=url,
@@ -164,6 +168,7 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
             language=f.language or "en",
             source_name=f.source_name,
             is_breaking=is_breaking,
+            search_tags=search_tags,
             published_at=f.published_at or datetime.utcnow(),
         ))
 
@@ -188,6 +193,26 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
 
     return len(final_rows)
 
+
+async def _generate_search_tags(title: str, summary: Optional[str]) -> str:
+    try:
+        provider = get_provider()
+        safe_title = (title or "").strip()
+        safe_summary = (summary or "").strip()
+        system = "You are an SEO and indexing expert. Generate highly relevant search keywords. Return ONLY a JSON object."
+        user = (
+            f"Generate 10-20 highly relevant search keywords and related concepts for the news article below. "
+            f"Include abbreviations, alternate names, broader topics, UPSC-relevant terminology, and synonyms. "
+            f"Return them as a comma-separated string. Do not prefix with '#'.\n\n"
+            f'Return ONLY this JSON:\n{{"search_tags":"..."}}\n\n'
+            f"Title: {safe_title}\n"
+            f"Summary: {safe_summary}"
+        )
+        data = await provider.generate_json(system, user)
+        return data.get("search_tags", "")
+    except Exception as e:
+        log.warning("Failed to generate search tags for {}: {}", (title or "")[:30], e)
+        return ""
 
 async def _generate_ai_cover(
     title: str, summary: Optional[str], article_hash: str

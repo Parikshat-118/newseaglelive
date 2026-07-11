@@ -13,12 +13,55 @@ if (!in_array($tab, ['quiz', 'media', 'mains', 'editorial'], true)) {
     $tab = 'quiz';
 }
 
+$lang = strtolower((string)($_GET['lang'] ?? 'en'));
+if (!in_array($lang, ['en', 'hi'], true)) {
+    $lang = 'en';
+}
+
 $today = date('Y-m-d');
 $yesterday = date('Y-m-d', strtotime('-1 day'));
 $reqDate = $_GET['date'] ?? $today;
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $reqDate)) {
     $reqDate = $today;
 }
+
+$studentUrl = static function (array $overrides = []) use ($tab, $reqDate, $lang): string {
+    $params = array_merge([
+        'tab' => $tab,
+        'date' => $reqDate,
+        'lang' => $lang,
+    ], $overrides);
+    return '/students.php?' . http_build_query($params);
+};
+
+$copy = [
+    'en' => [
+        'switch_en' => 'English',
+        'switch_hi' => 'हिन्दी',
+        'hub_title' => "Today's news. Your practice.",
+        'hub_intro' => "Fresh every morning at 6:30 - AI turns today's news into UPSC/SSC MCQs, Mains practice, editorial analysis, and a dedicated section for media-exam aspirants (IIMC, YMCA, JMI & more).",
+        'quiz_tab' => 'UPSC/SSC Quiz',
+        'media_tab' => 'Media Exams',
+        'mains_tab' => 'Mains Practice',
+        'editorial_tab' => 'Editorial',
+        'today' => 'Today',
+        'yesterday' => 'Yesterday',
+        'source_articles' => 'Source Articles',
+    ],
+    'hi' => [
+        'switch_en' => 'English',
+        'switch_hi' => 'हिन्दी',
+        'hub_title' => 'आज की खबरें। आपकी तैयारी।',
+        'hub_intro' => 'हर सुबह 6:30 बजे ताज़ा अपडेट - एआई आज की खबरों को UPSC/SSC MCQs, मेंस प्रैक्टिस, एडिटोरियल विश्लेषण और मीडिया-एग्जाम अभ्यर्थियों के लिए खास सामग्री में बदलता है।',
+        'quiz_tab' => 'UPSC/SSC क्विज',
+        'media_tab' => 'मीडिया परीक्षा',
+        'mains_tab' => 'मेंस प्रैक्टिस',
+        'editorial_tab' => 'एडिटोरियल',
+        'today' => 'आज',
+        'yesterday' => 'कल',
+        'source_articles' => 'स्रोत लेख',
+    ],
+][$lang];
 
 // ── Load content for the active tab ──────────────────────────────
 $quiz        = null;
@@ -27,21 +70,21 @@ $myAttempt   = null;
 $editorial   = null;
 $ed_points   = ['key_point' => [], 'arg_for' => [], 'arg_against' => []];
 $mains       = [];
-$mains       = [];
 $genStatus   = null;
+$sourceArticles = [];
 
 try {
     if ($tab === 'quiz' || $tab === 'media') {
         $exam = $tab === 'media' ? 'media' : 'upsc';
 
         $s = $db->prepare(
-            "SELECT q.id, q.title, q.quiz_date, g.status, g.model, g.provider
+            "SELECT q.id, q.title, q.quiz_date, q.language, g.status, g.model, g.provider
              FROM daily_quizzes q
              JOIN ai_generations g ON g.id = q.generation_id
-             WHERE q.exam_type = :e AND q.quiz_date = :d
+             WHERE q.exam_type = :e AND q.quiz_date = :d AND q.language = :lang
              ORDER BY q.id DESC LIMIT 1"
         );
-        $s->execute([':e' => $exam, ':d' => $reqDate]);
+        $s->execute([':e' => $exam, ':d' => $reqDate, ':lang' => $lang]);
         $quiz = $s->fetch();
 
         if ($quiz) {
@@ -74,20 +117,20 @@ try {
             // Check generation status
             $gs = $db->prepare(
                 "SELECT status, error_msg FROM ai_generations
-                 WHERE content_type = :t AND content_date = :d LIMIT 1"
+                 WHERE content_type = :t AND content_date = :d AND language = :lang LIMIT 1"
             );
-            $gs->execute([':t' => ($exam === 'media' ? 'media_quiz' : 'upsc_quiz'), ':d' => $reqDate]);
+            $gs->execute([':t' => ($exam === 'media' ? 'media_quiz' : 'upsc_quiz'), ':d' => $reqDate, ':lang' => $lang]);
             $genStatus = $gs->fetch() ?: null;
         }
 
     } elseif ($tab === 'mains') {
         $mq = $db->prepare(
-            "SELECT m.id, m.question, m.paper, m.hint, m.order_no
+            "SELECT m.id, m.question, m.paper, m.hint, m.order_no, m.language
              FROM daily_mains_questions m
-             WHERE DATE(m.mains_date) = :d
+             WHERE DATE(m.mains_date) = :d AND m.language = :lang
              ORDER BY m.order_no"
         );
-        $mq->execute([':d' => $reqDate]);
+        $mq->execute([':d' => $reqDate, ':lang' => $lang]);
         $mains = $mq->fetchAll();
 
         if ($mains) {
@@ -102,19 +145,19 @@ try {
             unset($mq_row);
         } else {
             $gs = $db->prepare(
-                "SELECT status FROM ai_generations WHERE content_type='mains' AND content_date=:d LIMIT 1"
+                "SELECT status FROM ai_generations WHERE content_type='mains' AND content_date=:d AND language=:lang LIMIT 1"
             );
-            $gs->execute([':d' => $reqDate]);
+            $gs->execute([':d' => $reqDate, ':lang' => $lang]);
             $genStatus = $gs->fetch() ?: null;
         }
 
     } elseif ($tab === 'editorial') {
         $ed = $db->prepare(
-            "SELECT id, title, background, exam_relevance, conclusion
+            "SELECT id, title, background, exam_relevance, conclusion, language
              FROM daily_editorials
-             WHERE DATE(editorial_date) = :d LIMIT 1"
+             WHERE DATE(editorial_date) = :d AND language = :lang LIMIT 1"
         );
-        $ed->execute([':d' => $reqDate]);
+        $ed->execute([':d' => $reqDate, ':lang' => $lang]);
         $editorial = $ed->fetch();
 
         if ($editorial) {
@@ -136,9 +179,9 @@ try {
             $sourceArticles = $src->fetchAll();
         } else {
             $gs = $db->prepare(
-                "SELECT status FROM ai_generations WHERE content_type='editorial' AND content_date=:d LIMIT 1"
+                "SELECT status FROM ai_generations WHERE content_type='editorial' AND content_date=:d AND language=:lang LIMIT 1"
             );
-            $gs->execute([':d' => $reqDate]);
+            $gs->execute([':d' => $reqDate, ':lang' => $lang]);
             $genStatus = $gs->fetch() ?: null;
         }
 
@@ -169,29 +212,42 @@ include __DIR__ . '/includes/header.php';
     padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 8px;
     background: var(--surface); color: var(--text); font-family: var(--ff-body);
 }
+.lang-toggle {
+    display: inline-flex; gap: 0.35rem; margin: 0 0 1.5rem; padding: 0.35rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+}
+.lang-toggle a {
+    padding: 0.5rem 0.9rem; border-radius: 999px; font-size: var(--fs-sm); color: var(--text-soft);
+}
+.lang-toggle a.active {
+    background: var(--accent); color: #fff;
+}
 </style>
 
 <section class="section" style="padding-top:2rem">
   <div class="container">
 
     <div class="section-eyebrow"><span class="mono">🎓 Daily</span><span>Student Hub</span></div>
-    <h1 class="section-title">Today's news. Your practice.</h1>
+    <div class="lang-toggle" role="tablist" aria-label="Student Hub language switch">
+      <a href="<?= h($studentUrl(['lang' => 'en'])) ?>" class="<?= $lang === 'en' ? 'active' : '' ?>" aria-current="<?= $lang === 'en' ? 'page' : 'false' ?>"><?= h($copy['switch_en']) ?></a>
+      <a href="<?= h($studentUrl(['lang' => 'hi'])) ?>" class="<?= $lang === 'hi' ? 'active' : '' ?> deva" aria-current="<?= $lang === 'hi' ? 'page' : 'false' ?>"><?= h($copy['switch_hi']) ?></a>
+    </div>
+    <h1 class="section-title<?= $lang === 'hi' ? ' deva' : '' ?>"><?= h($copy['hub_title']) ?></h1>
     <p style="max-width:62ch;color:var(--text-soft);margin:-1.5rem 0 2rem">
-      Fresh every morning at 6:30 — AI turns today's news into UPSC/SSC MCQs, Mains practice,
-      editorial analysis, and a dedicated section for media-exam aspirants (IIMC, YMCA, JMI &amp; more).
+      <?= h($copy['hub_intro']) ?>
     </p>
 
     <div class="admin-tabs">
-      <a id="tab-quiz"        class="admin-tab<?= $tab==='quiz'        ? ' active' : '' ?>" href="?tab=quiz">📝 UPSC/SSC Quiz</a>
-      <a id="tab-media"       class="admin-tab<?= $tab==='media'       ? ' active' : '' ?>" href="?tab=media">📺 Media Exams</a>
-      <a id="tab-mains"       class="admin-tab<?= $tab==='mains'       ? ' active' : '' ?>" href="?tab=mains">✍️ Mains Practice</a>
-      <a id="tab-editorial"   class="admin-tab<?= $tab==='editorial'   ? ' active' : '' ?>" href="?tab=editorial">📰 Editorial</a>
+      <a id="tab-quiz"        class="admin-tab<?= $tab==='quiz'        ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'quiz'])) ?>">📝 <?= h($copy['quiz_tab']) ?></a>
+      <a id="tab-media"       class="admin-tab<?= $tab==='media'       ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'media'])) ?>">📺 <?= h($copy['media_tab']) ?></a>
+      <a id="tab-mains"       class="admin-tab<?= $tab==='mains'       ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'mains'])) ?>">✍️ <?= h($copy['mains_tab']) ?></a>
+      <a id="tab-editorial"   class="admin-tab<?= $tab==='editorial'   ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'editorial'])) ?>">📰 <?= h($copy['editorial_tab']) ?></a>
     </div>
     
     <div class="archive-filters">
-        <a href="?tab=<?= $tab ?>&date=<?= $today ?>" class="archive-filter <?= $reqDate==$today?'active':'' ?>">Today</a>
-        <a href="?tab=<?= $tab ?>&date=<?= $yesterday ?>" class="archive-filter <?= $reqDate==$yesterday?'active':'' ?>">Yesterday</a>
-        <input type="date" class="date-picker" value="<?= $reqDate ?>" max="<?= $today ?>" onchange="location.href='?tab=<?= $tab ?>&date='+this.value">
+        <a href="<?= h($studentUrl(['date' => $today])) ?>" class="archive-filter <?= $reqDate==$today?'active':'' ?>"><?= h($copy['today']) ?></a>
+        <a href="<?= h($studentUrl(['date' => $yesterday])) ?>" class="archive-filter <?= $reqDate==$yesterday?'active':'' ?>"><?= h($copy['yesterday']) ?></a>
+        <input type="date" class="date-picker" value="<?= $reqDate ?>" max="<?= $today ?>" onchange='location.href=<?= json_encode('/students.php?tab=' . rawurlencode($tab) . '&lang=' . rawurlencode($lang) . '&date=') ?>+this.value'>
     </div>
 
     <?php /* ── QUIZ TAB ── */ if ($tab === 'quiz' || $tab === 'media'): ?>
@@ -199,11 +255,11 @@ include __DIR__ . '/includes/header.php';
       <?php if (!$quiz): ?>
         <div style="padding:2.5rem 0">
           <?php if ($genStatus && $genStatus['status'] === 'RUNNING'): ?>
-            <p style="color:var(--highlight)">⏳ The quiz for <?= $reqDate ?> is being generated right now... refresh in a moment.</p>
+            <p style="color:var(--highlight)"<?= $lang === 'hi' ? ' class="deva"' : '' ?>><?= $lang === 'hi' ? '⏳ ' . h($reqDate) . ' के लिए क्विज अभी तैयार हो रहा है... कृपया थोड़ी देर में रिफ्रेश करें।' : '⏳ The quiz for ' . h($reqDate) . ' is being generated right now... refresh in a moment.' ?></p>
           <?php elseif ($genStatus && $genStatus['status'] === 'FAILED'): ?>
-            <p style="color:var(--accent)">⚠️ The quiz generation for <?= $reqDate ?> failed. It will be retried automatically. Check back soon.</p>
+            <p style="color:var(--accent)"<?= $lang === 'hi' ? ' class="deva"' : '' ?>><?= $lang === 'hi' ? '⚠️ ' . h($reqDate) . ' के लिए क्विज जनरेशन असफल रही। यह अपने-आप फिर से प्रयास करेगी। कृपया थोड़ी देर बाद देखें।' : '⚠️ The quiz generation for ' . h($reqDate) . ' failed. It will be retried automatically. Check back soon.' ?></p>
           <?php else: ?>
-            <p style="color:var(--muted)">No quiz found for <?= $reqDate ?>. Generated daily at 6:30 AM.</p>
+            <p style="color:var(--muted)"<?= $lang === 'hi' ? ' class="deva"' : '' ?>><?= $lang === 'hi' ? h($reqDate) . ' के लिए कोई क्विज नहीं मिला। यह हर दिन सुबह 6:30 बजे बनता है।' : 'No quiz found for ' . h($reqDate) . '. Generated daily at 6:30 AM.' ?></p>
           <?php endif; ?>
         </div>
       <?php else: ?>
@@ -253,9 +309,9 @@ include __DIR__ . '/includes/header.php';
         <?php else: ?>
           <!-- ASPIRANT TAKING TEST VIEW (Anyone) -->
           <div id="quiz-landing" class="auth-card" style="max-width:500px;text-align:center;padding:3rem 2rem;margin:2rem auto">
-            <h2 style="font-family:var(--ff-display);margin:0 0 .5rem">Ready to begin?</h2>
-            <p style="color:var(--text-soft);margin:0 0 2rem">This is a strict <?= count($questions) ?>-question test. Once you click Start, the timer will begin.</p>
-            <button class="btn btn-primary" id="start-test-btn" type="button" style="padding:1rem 3rem;font-size:1.2rem">Start Test</button>
+            <h2 style="font-family:var(--ff-display);margin:0 0 .5rem" class="<?= $lang === 'hi' ? 'deva' : '' ?>"><?= $lang === 'hi' ? 'शुरू करने के लिए तैयार हैं?' : 'Ready to begin?' ?></h2>
+            <p style="color:var(--text-soft);margin:0 0 2rem" class="<?= $lang === 'hi' ? 'deva' : '' ?>"><?= $lang === 'hi' ? 'यह ' . count($questions) . ' प्रश्नों का सख्त टेस्ट है। Start दबाते ही टाइमर शुरू हो जाएगा।' : 'This is a strict ' . count($questions) . '-question test. Once you click Start, the timer will begin.' ?></p>
+            <button class="btn btn-primary<?= $lang === 'hi' ? ' deva' : '' ?>" id="start-test-btn" type="button" style="padding:1rem 3rem;font-size:1.2rem"><?= $lang === 'hi' ? 'टेस्ट शुरू करें' : 'Start Test' ?></button>
           </div>
 
           <div id="quiz-timer" style="display:none;position:sticky;top:60px;z-index:100;background:var(--surface);border-bottom:1px solid var(--border);padding:.75rem;text-align:center;font-weight:700;font-size:1.2rem;color:var(--highlight);margin:0 -1rem 1rem">
@@ -291,7 +347,7 @@ include __DIR__ . '/includes/header.php';
 
         <?php if (!empty($sourceArticles)): ?>
           <div style="margin-top:2rem">
-            <h4 style="font-size:var(--fs-sm);color:var(--muted);margin:0 0 .75rem">📰 Source Articles</h4>
+            <h4 style="font-size:var(--fs-sm);color:var(--muted);margin:0 0 .75rem" class="<?= $lang === 'hi' ? 'deva' : '' ?>">📰 <?= h($copy['source_articles']) ?></h4>
             <?php foreach ($sourceArticles as $sa): ?>
               <a href="/article.php?id=<?= (int)$sa['id'] ?>" style="display:block;font-size:var(--fs-sm);color:var(--accent);margin-bottom:.4rem;text-decoration:none">
                 → <?= h($sa['title']) ?>
@@ -419,10 +475,10 @@ include __DIR__ . '/includes/header.php';
 
     <?php /* ── MAINS TAB ── */ elseif ($tab === 'mains'): ?>
       <?php if (!$mains): ?>
-        <p style="color:var(--muted);padding:2rem 0">
+        <p style="color:var(--muted);padding:2rem 0" class="<?= $lang === 'hi' ? 'deva' : '' ?>">
           <?= $genStatus && $genStatus['status']==='FAILED'
-              ? "⚠️ Generation for $reqDate failed. Will retry automatically."
-              : "Mains questions for $reqDate are not available." ?>
+              ? ($lang === 'hi' ? "⚠️ $reqDate के लिए जनरेशन असफल रही। यह अपने-आप फिर से प्रयास करेगी।" : "⚠️ Generation for $reqDate failed. Will retry automatically.")
+              : ($lang === 'hi' ? "$reqDate के लिए मेंस प्रश्न उपलब्ध नहीं हैं।" : "Mains questions for $reqDate are not available.") ?>
         </p>
       <?php else: ?>
         <h3 style="font-family:var(--ff-display);margin:0 0 1.5rem">Mains Practice — <?= date('d M Y', strtotime($reqDate)) ?></h3>
@@ -451,10 +507,10 @@ include __DIR__ . '/includes/header.php';
 
     <?php /* ── EDITORIAL TAB ── */ elseif ($tab === 'editorial'): ?>
       <?php if (!$editorial): ?>
-        <p style="color:var(--muted);padding:2rem 0">
+        <p style="color:var(--muted);padding:2rem 0" class="<?= $lang === 'hi' ? 'deva' : '' ?>">
           <?= $genStatus && $genStatus['status']==='FAILED'
-              ? "⚠️ Generation for $reqDate failed. Will retry automatically."
-              : "Editorial analysis for $reqDate is not available." ?>
+              ? ($lang === 'hi' ? "⚠️ $reqDate के लिए जनरेशन असफल रही। यह अपने-आप फिर से प्रयास करेगी।" : "⚠️ Generation for $reqDate failed. Will retry automatically.")
+              : ($lang === 'hi' ? "$reqDate के लिए एडिटोरियल विश्लेषण उपलब्ध नहीं है।" : "Editorial analysis for $reqDate is not available.") ?>
         </p>
       <?php else: ?>
         <div class="auth-card" style="max-width:780px">
@@ -505,7 +561,7 @@ include __DIR__ . '/includes/header.php';
 
           <?php if (!empty($sourceArticles)): ?>
             <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
-              <h4 style="font-size:var(--fs-sm);color:var(--muted);margin:0 0 .75rem">📰 Source Articles</h4>
+              <h4 style="font-size:var(--fs-sm);color:var(--muted);margin:0 0 .75rem" class="<?= $lang === 'hi' ? 'deva' : '' ?>">📰 <?= h($copy['source_articles']) ?></h4>
               <?php foreach ($sourceArticles as $sa): ?>
                 <a href="/article.php?id=<?= (int)$sa['id'] ?>" style="display:block;font-size:var(--fs-sm);color:var(--accent);margin-bottom:.4rem;text-decoration:none">
                   → <?= h($sa['title']) ?>

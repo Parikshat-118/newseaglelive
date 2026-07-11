@@ -238,15 +238,52 @@ async def job_generate_mains() -> None:
         log.exception("[job] generate mains failed")
 
 
+async def job_generate_upsc_hi() -> None:
+    log.info("[job] generate upsc hi started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("upsc_quiz", language="hi")
+    except Exception:
+        log.exception("[job] generate upsc hi failed")
+
+
+async def job_generate_media_hi() -> None:
+    log.info("[job] generate media hi started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("media_quiz", language="hi")
+    except Exception:
+        log.exception("[job] generate media hi failed")
+
+
+async def job_generate_editorial_hi() -> None:
+    log.info("[job] generate editorial hi started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("editorial", language="hi")
+    except Exception:
+        log.exception("[job] generate editorial hi failed")
+
+
+async def job_generate_mains_hi() -> None:
+    log.info("[job] generate mains hi started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("mains", language="hi")
+    except Exception:
+        log.exception("[job] generate mains hi failed")
+
+
 async def job_student_recovery() -> None:
     log.info("[job] student recovery started")
     try:
         from datetime import date
         from src.services.student_service import generate_content, _generation_exists
         today = date.today()
-        for t in ["upsc_quiz", "media_quiz", "editorial", "mains"]:
-            if not _generation_exists(t, today):
-                log.info("Recovery: generating missing {}", t)
-                await generate_content(t, today)
+        for lang in ["en", "hi"]:
+            for t in ["upsc_quiz", "media_quiz", "editorial", "mains"]:
+                if not _generation_exists(t, today, lang):
+                    log.info("Recovery: generating missing {} lang={}", t, lang)
+                    await generate_content(t, today, language=lang)
     except Exception:
         log.exception("[job] student recovery failed")

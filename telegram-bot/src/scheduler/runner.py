@@ -89,16 +89,32 @@ def start_scheduler(app: Application) -> AsyncIOScheduler:
         id="gen_upsc", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
+        J.job_generate_upsc_hi, CronTrigger(hour=6, minute=33, timezone=tzinfo),
+        id="gen_upsc_hi", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
         J.job_generate_media, CronTrigger(hour=6, minute=35, timezone=tzinfo),
         id="gen_media", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
+        J.job_generate_media_hi, CronTrigger(hour=6, minute=38, timezone=tzinfo),
+        id="gen_media_hi", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
         J.job_generate_editorial, CronTrigger(hour=6, minute=40, timezone=tzinfo),
         id="gen_editorial", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
+        J.job_generate_editorial_hi, CronTrigger(hour=6, minute=43, timezone=tzinfo),
+        id="gen_editorial_hi", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
         J.job_generate_mains, CronTrigger(hour=6, minute=45, timezone=tzinfo),
         id="gen_mains", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
+        J.job_generate_mains_hi, CronTrigger(hour=6, minute=48, timezone=tzinfo),
+        id="gen_mains_hi", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
         J.job_student_recovery, CronTrigger(hour=8, minute=0, timezone=tzinfo),

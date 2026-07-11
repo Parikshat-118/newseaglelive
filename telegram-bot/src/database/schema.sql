@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS `news_articles` (
   `source_name`    VARCHAR(128) NULL,
   `is_breaking`    TINYINT(1)   NOT NULL DEFAULT 0,
   `trending_score` INT          NOT NULL DEFAULT 0,
+  `search_tags`    TEXT         NULL,
 
   -- v2: counters
   `view_count`     INT          NOT NULL DEFAULT 0,
