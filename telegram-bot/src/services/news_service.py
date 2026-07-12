@@ -33,7 +33,7 @@ from src.services.source_adapters.gnews_adapter import GNewsAdapter
 from src.utils.cache import seen_article
 from src.utils.dedupe import canonical_url, url_hash
 from src.utils.logger import log
-from src.services.ai_provider import get_provider
+from src.services.ai_provider import get_ai_provider
 
 
 _adapters = [RSSAdapter(), NewsAPIAdapter(), GNewsAdapter()]
@@ -196,7 +196,7 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
 
 async def _generate_search_tags(title: str, summary: Optional[str]) -> str:
     try:
-        provider = get_provider()
+        provider = get_ai_provider()
         safe_title = (title or "").strip()
         safe_summary = (summary or "").strip()
         system = "You are an SEO and indexing expert. Generate highly relevant search keywords. Return ONLY a JSON object."

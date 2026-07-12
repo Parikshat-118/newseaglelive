@@ -277,6 +277,7 @@ async def job_generate_mains_hi() -> None:
 async def job_student_recovery() -> None:
     log.info("[job] student recovery started")
     try:
+        import asyncio
         from datetime import date
         from src.services.student_service import generate_content, _generation_exists
         today = date.today()
@@ -284,6 +285,11 @@ async def job_student_recovery() -> None:
             for t in ["upsc_quiz", "media_quiz", "editorial", "mains"]:
                 if not _generation_exists(t, today, lang):
                     log.info("Recovery: generating missing {} lang={}", t, lang)
-                    await generate_content(t, today, language=lang)
+                    try:
+                        await generate_content(t, today, language=lang)
+                    except Exception:
+                        log.exception("Recovery failed for {} lang={}", t, lang)
+                    # Safely wait 3 minutes before hitting AI provider again to prevent rate limits
+                    await asyncio.sleep(180)
     except Exception:
         log.exception("[job] student recovery failed")

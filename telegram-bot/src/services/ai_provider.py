@@ -69,7 +69,8 @@ class GroqProvider(BaseAIProvider):
     _DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
     def __init__(self, api_key: str, model: str = "") -> None:
-        self._api_key = api_key
+        self._api_keys = [k.strip() for k in api_key.split(",") if k.strip()]
+        self._key_index = 0
         self._model   = model or self._DEFAULT_MODEL
         self._timeout = float(os.environ.get("AI_REQUEST_TIMEOUT", "60"))
 
@@ -87,8 +88,13 @@ class GroqProvider(BaseAIProvider):
         user: str,
         temperature: float = 0.4,
     ) -> dict[str, Any]:
+        
+        # Round-robin selection ensures retries always use a different key
+        selected_key = self._api_keys[self._key_index]
+        self._key_index = (self._key_index + 1) % len(self._api_keys)
+        
         headers = {
-            "Authorization": f"Bearer {self._api_key}",
+            "Authorization": f"Bearer {selected_key}",
             "Content-Type":  "application/json",
         }
         payload = {
