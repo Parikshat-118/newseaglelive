@@ -2,11 +2,15 @@
 
 **This is the FULL bot** — all original features PLUS:
 
+- 🌏 **Full Hindi Support (Student Hub)** — The AI generates localized UPSC Quizzes, Editorials, and Mains Practice seamlessly in both English and Hindi.
+- 🧠 **AI Semantic Search Indexing** — Every incoming news article is automatically tagged with 10-20 AI-generated concepts and synonyms to supercharge the PHP web-search engine.
+- ⚖️ **Multi-Key Round-Robin Load Balancing** — Deterministic round-robin cycling across multiple Groq API keys to infinitely scale token limits and guarantee zero downtime during API rate limits.
+- ⚡ **Dual-Lane AI Model Routing** — Dedicated `GROQ_QUIZ_API_KEY` routes complex quizzes to heavy models (e.g. 70b), while background tasks are routed to ultra-fast, cheap models (e.g. 8b) to save hundreds of thousands of tokens per day.
 - 🔐 **Web login (Telegram-OTP)** — `/setmobile`, `/webauth`, `/mymobile`. Bot generates a 6-digit code valid 3 minutes; user logs in on the website with mobile + code.
 - 🚨 **AI Severe Alerts** — every 30 min the AI scans news for severe location-specific events (cyclone, flood, disease outbreak, terror...) and pushes them ONLY to users in affected states/districts (PIN-code based).
 - 👑 **Super Admin** — mobile `9540739137` auto-promotes to admin on `/setmobile`. Admin can promote others via the web admin panel.
 - 📊 **Web-app counters** — views, likes, shares per article (shared MySQL with the web app).
-- ✅ Pre-configured: new OpenRouter key, working AI models (grok-4.3), Python 3.14-compatible requirements, fixed systemd unit.
+- ✅ Pre-configured: Multi-key AI routing, Python 3.14-compatible requirements, fixed systemd unit, and automatic rate-limit recovery.
 
 ## Fresh install (one command)
 

@@ -296,7 +296,7 @@ async def generate_content(content_type: str, target_date: date | None = None, l
     article_ids = [a["id"] for a in articles]
 
     try:
-        provider = get_ai_provider()
+        provider = get_ai_provider(purpose="quiz")
     except RuntimeError as exc:
         log.error("student: AI provider not configured — {}", exc)
         return

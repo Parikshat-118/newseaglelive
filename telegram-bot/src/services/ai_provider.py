@@ -218,19 +218,28 @@ class OpenRouterProvider(BaseAIProvider):
 # Factory — reads AI_PROVIDER and AI_MODEL from environment
 # ──────────────────────────────────────────────────────────────────────────────
 
-def get_ai_provider() -> BaseAIProvider:
+def get_ai_provider(model_override: str = "", purpose: str = "default") -> BaseAIProvider:
     """
     Instantiate and return the configured AI provider.
 
     .env keys:
         AI_PROVIDER  — groq (default) | openrouter
         AI_MODEL     — provider-specific model string
+        GROQ_QUIZ_API_KEY — dedicated keys for student hub
     """
     provider_name = os.environ.get("AI_PROVIDER", "groq").lower()
-    model         = os.environ.get("AI_MODEL", "")
+    
+    # Use override if provided, else use .env, else fallback to empty
+    model = model_override if model_override else os.environ.get("AI_MODEL", "")
 
     if provider_name == "groq":
-        api_key = os.environ.get("GROQ_API_KEY", "")
+        # Route to dedicated quiz keys if requested and available
+        quiz_api_key = os.environ.get("GROQ_QUIZ_API_KEY", "")
+        if purpose == "quiz" and quiz_api_key:
+            api_key = quiz_api_key
+        else:
+            api_key = os.environ.get("GROQ_API_KEY", "")
+
         if not api_key:
             raise RuntimeError(
                 "GROQ_API_KEY is not set in .env. "

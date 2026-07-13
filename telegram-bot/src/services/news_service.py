@@ -196,7 +196,7 @@ async def _persist(fetched: Iterable[FetchedArticle]) -> int:
 
 async def _generate_search_tags(title: str, summary: Optional[str]) -> str:
     try:
-        provider = get_ai_provider()
+        provider = get_ai_provider(model_override="llama-3.1-8b-instant")
         safe_title = (title or "").strip()
         safe_summary = (summary or "").strip()
         system = "You are an SEO and indexing expert. Generate highly relevant search keywords. Return ONLY a JSON object."

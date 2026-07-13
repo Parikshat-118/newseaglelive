@@ -158,7 +158,7 @@ news-eagle-live/
 | Session/state     | Cookie (`ne_sid`) → `web_sessions`  | PTB `context.user_data` (in-memory, **not persisted**) |
 | Cache/queue       | —                                    | Redis 7 (dedupe, rate-limit, cache)      |
 | Scheduler         | —                                    | APScheduler (Asia/Kolkata tz)            |
-| AI provider       | OpenRouter (Grok), 1 integration    | OpenRouter (Grok), **3 separate integrations** |
+| AI provider       | OpenRouter (Grok), 1 integration    | Groq/OpenRouter with **Dual-Lane Multi-Key Round-Robin Load Balancing** |
 | Web server        | Apache/nginx + PHP-FPM              | systemd unit, long-poll or webhook       |
 
 ---
@@ -200,7 +200,7 @@ news-eagle-live/
 | Table | System | Purpose |
 |---|---|---|
 | `quizzes` / `quiz_results` | **Bot-native** | Casual `/quiz` command, AI-generated on demand, ORM-backed. |
-| `student_content` / `web_quiz_attempts` | **Student Hub** | UPSC/SSC/media exam content, cron-generated daily 6:30 IST, raw SQL, `INSERT IGNORE` one-attempt guard, surfaced only on `students.php`. |
+| `daily_quizzes`, `daily_editorials`, `daily_mains_questions` | **Student Hub** | UPSC/SSC/media exam content, **bilingual (EN/HI)**, cron-generated daily 6:30 IST. Includes AI-generated `search_tags` for global frontend searching. |
 
 These do not share code, data, or leaderboards — treat as two separate products.
 
@@ -268,10 +268,7 @@ These do not share code, data, or leaderboards — treat as two separate product
 2. **Dual quiz systems** — see §4. Confusing for anyone extending "the quiz feature"
    without realizing there are two.
 
-3. **Four independent OpenRouter integrations** — `ai_service.py` (proper, settings-
-   driven, retried), `severe_alerts_service.py` and `student_service.py` (both read
-   `os.environ` directly, own model fallback lists), and PHP's `ai-explain.php`
-   (separate key in `config.php`). None share rate-limiting or spend awareness.
+3. **Multiple AI integrations** — `ai_service.py`, `severe_alerts_service.py`, `news_service.py`, and `student_service.py` now share a unified `get_ai_provider` factory with **Dual-Lane Multi-Key Round-Robin Load Balancing**. However, PHP's `ai-explain.php` still uses a separate key in `config.php`.
 
 4. **Split trending signals** — bot's `trending_score` (bookmarks×3 + reading_history)
    and web's ranking (`like_count×3 + view_count`) draw from disjoint activity tables.
@@ -317,4 +314,4 @@ These do not share code, data, or leaderboards — treat as two separate product
 
 *This document was compiled from a full review of the frontend (PHP), backend
 (Python bot), and live database schema. It reflects the system as of the files
-reviewed on 2026-07-03.*
+reviewed on 2026-07-13, including the v2.1 Bilingual & AI Search upgrade.*
