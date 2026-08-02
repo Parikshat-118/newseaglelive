@@ -18,26 +18,32 @@ from src.config.settings import get_settings
 from src.utils.logger import log
 
 
-_client: AsyncOpenAI | None = None
-
+_key_index = 0
 
 def _get_client() -> AsyncOpenAI:
-    global _client
+    global _key_index
 
-    if _client is None:
-        settings = get_settings()
+    settings = get_settings()
+    
+    # Safely handle comma-separated multi-key architecture and strip any accidental quotes
+    raw_keys = settings.groq_api_key
+    key_list = [k.strip().strip("'\"") for k in raw_keys.split(",") if k.strip().strip("'\"")]
+    
+    if not key_list:
+        raise ValueError("No valid GROQ_API_KEY found in settings!")
 
-        _client = AsyncOpenAI(
-            api_key=settings.groq_api_key,
-            base_url=settings.groq_base_url,
-        )
+    # Round-Robin selection
+    selected_key = key_list[_key_index]
+    _key_index = (_key_index + 1) % len(key_list)
 
-    return _client
+    return AsyncOpenAI(
+        api_key=selected_key,
+        base_url=settings.groq_base_url,
+    )
 
 
 async def close_ai_client() -> None:
-    global _client
-    _client = None
+    pass
 
 
 @retry(
@@ -47,6 +53,7 @@ async def close_ai_client() -> None:
     retry=retry_if_exception_type(Exception),
 )
 async def _chat(payload: dict):
+    # Instantiate a fresh client (with a new round-robin key) on every attempt
     client = _get_client()
 
     return await client.chat.completions.create(**payload)

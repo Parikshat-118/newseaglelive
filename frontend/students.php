@@ -9,7 +9,7 @@ $user = ne_current_user();
 $db   = ne_db();
 
 $tab = $_GET['tab'] ?? 'quiz';
-if (!in_array($tab, ['quiz', 'media', 'mains', 'editorial'], true)) {
+if (!in_array($tab, ['quiz', 'media', 'mains', 'editorial', 'startup'], true)) {
     $tab = 'quiz';
 }
 
@@ -44,6 +44,7 @@ $copy = [
         'media_tab' => 'Media Exams',
         'mains_tab' => 'Mains Practice',
         'editorial_tab' => 'Editorial',
+        'startup_tab' => 'Startup Ideas',
         'today' => 'Today',
         'yesterday' => 'Yesterday',
         'source_articles' => 'Source Articles',
@@ -57,6 +58,7 @@ $copy = [
         'media_tab' => 'मीडिया परीक्षा',
         'mains_tab' => 'मेंस प्रैक्टिस',
         'editorial_tab' => 'एडिटोरियल',
+        'startup_tab' => 'स्टार्टअप आइडियाज़',
         'today' => 'आज',
         'yesterday' => 'कल',
         'source_articles' => 'स्रोत लेख',
@@ -70,6 +72,7 @@ $myAttempt   = null;
 $editorial   = null;
 $ed_points   = ['key_point' => [], 'arg_for' => [], 'arg_against' => []];
 $mains       = [];
+$startupIdeas= [];
 $genStatus   = null;
 $sourceArticles = [];
 
@@ -185,6 +188,30 @@ try {
             $genStatus = $gs->fetch() ?: null;
         }
 
+    } elseif ($tab === 'startup') {
+        $st = $db->prepare(
+            "SELECT sg.id, g.model, g.provider, g.status
+             FROM daily_startup_generations sg
+             JOIN ai_generations g ON g.id = sg.generation_id
+             WHERE DATE(sg.generation_date) = :d AND sg.language = :lang LIMIT 1"
+        );
+        $st->execute([':d' => $reqDate, ':lang' => $lang]);
+        $startupGen = $st->fetch();
+
+        if ($startupGen) {
+            $si = $db->prepare(
+                "SELECT title, description, category FROM startup_ideas
+                 WHERE generation_id = :gid ORDER BY display_order"
+            );
+            $si->execute([':gid' => $startupGen['id']]);
+            $startupIdeas = $si->fetchAll();
+        } else {
+            $gs = $db->prepare(
+                "SELECT status FROM ai_generations WHERE content_type='startup_ideas' AND content_date=:d AND language=:lang LIMIT 1"
+            );
+            $gs->execute([':d' => $reqDate, ':lang' => $lang]);
+            $genStatus = $gs->fetch() ?: null;
+        }
     }
 } catch (Throwable $e) {
     error_log('[students] ' . $e->getMessage());
@@ -242,6 +269,7 @@ include __DIR__ . '/includes/header.php';
       <a id="tab-media"       class="admin-tab<?= $tab==='media'       ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'media'])) ?>">📺 <?= h($copy['media_tab']) ?></a>
       <a id="tab-mains"       class="admin-tab<?= $tab==='mains'       ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'mains'])) ?>">✍️ <?= h($copy['mains_tab']) ?></a>
       <a id="tab-editorial"   class="admin-tab<?= $tab==='editorial'   ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'editorial'])) ?>">📰 <?= h($copy['editorial_tab']) ?></a>
+      <a id="tab-startup"     class="admin-tab<?= $tab==='startup'     ? ' active' : '' ?>" href="<?= h($studentUrl(['tab' => 'startup'])) ?>">💡 <?= h($copy['startup_tab']) ?></a>
     </div>
     
     <div class="archive-filters">
@@ -570,6 +598,28 @@ include __DIR__ . '/includes/header.php';
             </div>
           <?php endif; ?>
         </div>
+      <?php endif; ?>
+
+    <?php /* ── STARTUP IDEAS TAB ── */ elseif ($tab === 'startup'): ?>
+      <?php if (empty($startupIdeas)): ?>
+        <p style="color:var(--muted);padding:2rem 0" class="<?= $lang === 'hi' ? 'deva' : '' ?>">
+          <?= $genStatus && $genStatus['status']==='FAILED'
+              ? ($lang === 'hi' ? "⚠️ $reqDate के लिए जनरेशन असफल रही। यह अपने-आप फिर से प्रयास करेगी।" : "⚠️ Generation for $reqDate failed. Will retry automatically.")
+              : ($lang === 'hi' ? "$reqDate के लिए स्टार्टअप आइडियाज़ उपलब्ध नहीं हैं।" : "Startup Ideas for $reqDate are not available.") ?>
+        </p>
+      <?php else: ?>
+        <h3 style="font-family:var(--ff-display);margin:0 0 1.5rem">💡 Startup Ideas — <?= date('d M Y', strtotime($reqDate)) ?></h3>
+        <?php foreach ($startupIdeas as $idea): ?>
+          <div class="auth-card" style="max-width:760px;margin-bottom:1.25rem">
+            <?php if (!empty($idea['category'])): ?>
+              <div style="margin-bottom:.75rem">
+                <span class="badge badge-admin"><?= h($idea['category']) ?></span>
+              </div>
+            <?php endif; ?>
+            <p style="font-family:var(--ff-display);font-weight:700;font-size:var(--fs-xl);margin:0 0 .5rem">💡 <?= h($idea['title']) ?></p>
+            <p style="color:var(--text-soft);margin:0;font-size:var(--fs-base)"><?= h($idea['description']) ?></p>
+          </div>
+        <?php endforeach; ?>
       <?php endif; ?>
 
     <?php endif; ?>

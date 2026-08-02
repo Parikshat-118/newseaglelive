@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Guide - News Eagle Live</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+            background-color: #fff;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 40px; }
+        h3 { color: #e67e22; margin-top: 30px; }
+        p { margin-bottom: 15px; }
+        .pitch { background: #f8f9fa; border-left: 5px solid #3498db; padding: 15px; font-style: italic; margin-bottom: 30px; }
+        .qa-box { background: #fdfdfd; border: 1px solid #e1e8ed; border-radius: 8px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .question { font-weight: bold; color: #2c3e50; font-size: 1.1em; margin-bottom: 10px; }
+        .answer-label { font-weight: bold; color: #27ae60; text-transform: uppercase; font-size: 0.8em; letter-spacing: 1px; margin-bottom: 8px; display: block; }
+        ul { margin-bottom: 20px; }
+        li { margin-bottom: 8px; }
+        
+        @media print {
+            body { padding: 0; }
+            .qa-box { page-break-inside: avoid; border: none; box-shadow: none; padding: 10px 0; border-bottom: 1px solid #ccc; border-radius: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>News Eagle Live — Interview Preparation Guide</h1>
+    <p>This guide breaks down your project structurally, logically, and gives you ready-to-use answers for technical interviews.</p>
+
+    <h2>1. Project Overview & Pitch</h2>
+    <div class="pitch">
+        <strong>The Elevator Pitch:</strong><br>
+        "I built News Eagle Live, an AI-powered news aggregator and Telegram bot. It automatically fetches global news from various APIs and RSS feeds, uses Large Language Models (like Llama 3) to read, summarize, categorize, and translate those articles, and then stores the processed data in a centralized MySQL database. Finally, a decoupled PHP frontend serves these AI-curated news summaries to users in a clean, modern web interface."
+    </div>
+
+    <h3>Key Technologies Used</h3>
+    <ul>
+        <li><strong>Backend Worker:</strong> Python 3, <code>apscheduler</code> (for cron jobs), <code>httpx</code> (async HTTP requests)</li>
+        <li><strong>AI Integration:</strong> OpenRouter / Groq APIs (using Llama-3 models)</li>
+        <li><strong>Database:</strong> MySQL, accessed via <strong>SQLAlchemy</strong> (Python ORM) and <strong>PDO</strong> (PHP)</li>
+        <li><strong>Frontend UI:</strong> Vanilla PHP, HTML5, CSS3, JavaScript (no heavy frameworks for maximum speed)</li>
+        <li><strong>Deployment:</strong> AWS EC2 (Ubuntu), Systemd background services</li>
+    </ul>
+
+    <h2>2. System Architecture</h2>
+    <p>A core strength of your project is its <strong>Decoupled Architecture</strong>.</p>
+    <ul>
+        <li><strong>The Fetcher & Processor (Python):</strong> Runs continuously in the background on a Linux server. It reaches out to data sources, downloads raw text, passes it to the AI for analysis, and saves the perfect, formatted result.</li>
+        <li><strong>The Central Brain (MySQL):</strong> The database acts as the single source of truth.</li>
+        <li><strong>The Viewer (PHP):</strong> The frontend is entirely stateless. It does not fetch news or talk to the AI for the main feed. It simply connects to the database, reads the finalized data, and renders HTML.</li>
+    </ul>
+    <p><em>Why is this good?</em> If your Python bot crashes, the website stays online and fast. If the website crashes, the Python bot keeps collecting data. This is called <strong>Separation of Concerns</strong>.</p>
+
+    <h2>3. Top Interview Questions & Answers</h2>
+
+    <div class="qa-box">
+        <div class="question">Q1: Why did you decouple the backend (Python) and frontend (PHP) instead of building a single full-stack app in Django or Laravel?</div>
+        <span class="answer-label">How to answer:</span>
+        <p>"I wanted a highly resilient, microservices-style architecture. The Python backend is a heavy worker—it manages asynchronous API calls, talks to external AI models, and handles scheduled background jobs. If I combined this with the web server, heavy processing spikes could slow down the website for users. By decoupling them using MySQL as the bridge, the PHP frontend remains incredibly fast and stateless, only having to read data, while Python does the heavy lifting in the background."</p>
+    </div>
+
+    <div class="qa-box">
+        <div class="question">Q2: You mentioned this is an AI project. Are you running Machine Learning models locally?</div>
+        <span class="answer-label">How to answer:</span>
+        <p>"No, I am not running local neural networks or models like PyTorch on my server. That would require massive, expensive GPU infrastructure. Instead, this is an <strong>Applied AI</strong> architecture. My Python backend acts as an AI Client. It interfaces securely with powerful cloud-hosted LLMs (like Llama 3.1 70B). I designed the prompts, built the parsing logic (ensuring the AI returns strict JSON), and integrated the AI's output seamlessly into my business logic."</p>
+    </div>
+
+    <div class="qa-box">
+        <div class="question">Q3: How do you prevent fetching and processing the exact same news article multiple times?</div>
+        <span class="answer-label">How to answer:</span>
+        <p>"I implemented a deduplication system. Whenever the Python adapters fetch a raw article, I take the canonical URL of that article and generate a unique cryptographic hash (SHA-256). Before I send the article to the expensive AI API or the database, I check my database (and Redis cache) for that hash. If it exists, I instantly skip it. This saves API tokens and prevents duplicate data on the frontend."</p>
+    </div>
+
+    <div class="qa-box">
+        <div class="question">Q4: How does your new 'Startup Ideas' feature work technically?</div>
+        <span class="answer-label">How to answer:</span>
+        <p>"It’s a scheduled pipeline. Every morning, the Python scheduler triggers a specific job. The bot looks at the trending news stored in the database. It constructs a highly strict system prompt for the AI, injecting the news context, and mandates that the AI responds in a precise JSON schema containing 5 to 10 startup ideas, with strict word limits for the titles. Once the JSON is returned, Python validates the structure, parses it, and inserts it into specialized <code>startup_generations</code> and <code>startup_ideas</code> relational tables. The PHP frontend then queries these tables to display daily inspirations to students."</p>
+    </div>
+
+    <div class="qa-box">
+        <div class="question">Q5: What happens if the AI provider's API goes down or returns bad data?</div>
+        <span class="answer-label">How to answer:</span>
+        <p>"I built fallback mechanisms. First, for API outages, my Python service catches timeout and connection exceptions, logs the error, and gracefully skips that article without crashing the whole bot. Second, if the AI hallucinates and returns broken JSON, I use regex and string manipulation to attempt to strip out markdown fences and extract the JSON object. If parsing completely fails, it iterates to a fallback model or aborts the operation safely."</p>
+    </div>
+
+    <div class="qa-box">
+        <div class="question">Q6: What is SQLAlchemy and why did you use it instead of raw SQL queries?</div>
+        <span class="answer-label">How to answer:</span>
+        <p>"SQLAlchemy is an Object-Relational Mapper (ORM) for Python. Instead of writing raw <code>INSERT INTO</code> string queries, I define my database tables as Python Classes. This does three things: it prevents SQL Injection attacks by automatically sanitizing inputs, it makes the codebase much cleaner and object-oriented, and it abstracts the SQL dialect, meaning I could easily migrate from MySQL to PostgreSQL in the future with almost no code changes."</p>
+    </div>
+
+    <h2>4. How to discuss future improvements</h2>
+    <p>Interviews love candidates who know how to improve their own work. If asked "What would you add next?", you can say:</p>
+    <ul>
+        <li><strong>Vector Search / RAG:</strong> "I would like to integrate a vector database (like Pinecone) to create embeddings for all news articles. This would allow users to do semantic 'smart searches' instead of just keyword searches."</li>
+        <li><strong>User Personalization:</strong> "I plan to add a feature where users can upvote/downvote articles, and I can feed those preferences back into an AI prompt to generate a personalized daily digest for them."</li>
+    </ul>
+
+</body>
+</html>

@@ -117,6 +117,14 @@ def start_scheduler(app: Application) -> AsyncIOScheduler:
         id="gen_mains_hi", max_instances=1, coalesce=True, replace_existing=True,
     )
     _scheduler.add_job(
+        J.job_generate_startup, CronTrigger(hour=6, minute=51, timezone=tzinfo),
+        id="gen_startup", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
+        J.job_generate_startup_hi, CronTrigger(hour=6, minute=54, timezone=tzinfo),
+        id="gen_startup_hi", max_instances=1, coalesce=True, replace_existing=True,
+    )
+    _scheduler.add_job(
         J.job_student_recovery, CronTrigger(hour=8, minute=0, timezone=tzinfo),
         id="gen_recovery", max_instances=1, coalesce=True, replace_existing=True,
     )

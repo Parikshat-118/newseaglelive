@@ -16,7 +16,7 @@ fact explains most of how this project behaves.
                     ┌─────────────────────────┐
                     │        MySQL 8           │
                     │      news_eagle DB        │
-                    │   (26 tables + 2 views)    │
+                    │   (27 tables + 2 views)    │
                     └───────────┬───────────────┘
                     reads/writes │  reads/writes
         ┌───────────────────────┼───────────────────────┐
@@ -208,12 +208,13 @@ These do not share code, data, or leaderboards — treat as two separate product
 | Table | Owner | Purpose |
 |---|---|---|
 | `feedback` | web | Testimonials, admin-approval gated (`is_approved`). |
+| `site_live_viewers` | web | Real-time global active user tracking via 20-second heartbeat polling. |
 | `notifications` | bot | Keyword/breaking/digest/quiz/broadcast/weather delivery log. |
 | `chat_sessions` | bot | Present in schema for persisted AI-chat history; current `chat.py` actually uses `context.user_data['chat_history']` instead — this table appears unused by current handler code. |
 | `pincode_directory` | shared | PIN → city/district/state/lat/lng cache (India Post API fallback). |
 | `v_top_liked_24h` | view | Convenience view, presumably backing homepage "trending" query. |
 
-**28 total objects** (26 tables + 2 views) — matches phpMyAdmin exactly.
+**29 total objects** (27 tables + 2 views) — matches phpMyAdmin exactly.
 
 ## Frontend
 

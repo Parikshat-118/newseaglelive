@@ -106,6 +106,10 @@ include __DIR__ . '/includes/header.php';
       <button class="action-btn" id="ai-explain-btn" data-aid="<?= $id ?>" type="button" style="min-width:140px;justify-content:center;border-color:var(--highlight);color:var(--highlight)">
         ✨ <span>Explain with AI</span>
       </button>
+      <button class="action-btn" id="ai-direct-listen-btn" data-aid="<?= $id ?>" type="button" style="min-width:140px;justify-content:center;border-color:var(--highlight);color:var(--highlight)">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <span>Listen to AI</span>
+      </button>
       <button class="action-btn" data-share="whatsapp" data-article-id="<?= $id ?>" data-share-url="<?= h($shareUrl) ?>" data-share-title="<?= h($a['title']) ?>" type="button" style="min-width:100px;justify-content:center">
         <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413"/></svg>
         <span>WhatsApp</span>
@@ -142,6 +146,27 @@ include __DIR__ . '/includes/header.php';
         <span class="ai-tag" style="background:var(--highlight);color:#000">✨ AI EXPLANATION</span>
         <span id="ai-explain-lang-label" style="font-size:0.8rem;color:var(--text-soft);margin-left:auto"></span>
       </div>
+
+      <!-- ── Modern Audio Player Bar ── -->
+      <div id="ai-audio-player" style="display:none;margin-bottom:1rem;padding:0.75rem 1rem;background:linear-gradient(135deg, rgba(255,179,71,0.08), rgba(255,179,71,0.03));border:1px solid color-mix(in srgb, var(--highlight) 30%, transparent);border-radius:10px;">
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <button id="ai-tts-play" type="button" title="Play / Pause" style="background:var(--highlight);border:none;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#000;flex-shrink:0;transition:transform .15s,box-shadow .15s;">
+            <svg id="ai-tts-icon-play" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M8 5v14l11-7z"/></svg>
+            <svg id="ai-tts-icon-pause" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <button id="ai-tts-restart" type="button" title="Restart" style="background:none;border:1px solid color-mix(in srgb, var(--highlight) 40%, transparent);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--highlight);flex-shrink:0;transition:border-color .15s,color .15s;">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+          </button>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;">
+            <span id="ai-tts-status" style="font-size:0.78rem;font-weight:600;color:var(--highlight);letter-spacing:0.03em;">Ready to play</span>
+            <span id="ai-tts-lang-info" style="font-size:0.7rem;color:var(--text-soft);opacity:0.7;"></span>
+          </div>
+          <button id="ai-tts-stop" type="button" title="Stop" style="background:none;border:none;cursor:pointer;color:var(--text-soft);opacity:0.6;padding:4px;transition:opacity .15s;">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M6 6h12v12H6z"/></svg>
+          </button>
+        </div>
+      </div>
+
       <div id="ai-explain-result" style="color:var(--text-soft);white-space:pre-line;line-height:1.7"></div>
     </div>
 
@@ -345,11 +370,115 @@ body.lang-modal-open{overflow:hidden!important}
       // Initial render
       renderList('');
 
-      // ── AI Explain button ─────────────────────────────────────────
-      btn.addEventListener('click', function(){
-        btn.disabled = true;
-        trigger.style.pointerEvents = 'none';
-        btn.querySelector('span').textContent = 'Thinking…';
+      // ── AI Explanation + TTS Logic ─────────────────────────────────
+      var directListenBtn = document.getElementById('ai-direct-listen-btn');
+      var audioPlayer    = document.getElementById('ai-audio-player');
+      var ttsPlayBtn     = document.getElementById('ai-tts-play');
+      var ttsRestartBtn  = document.getElementById('ai-tts-restart');
+      var ttsStopBtn     = document.getElementById('ai-tts-stop');
+      var ttsIconPlay    = document.getElementById('ai-tts-icon-play');
+      var ttsIconPause   = document.getElementById('ai-tts-icon-pause');
+      var ttsStatus      = document.getElementById('ai-tts-status');
+      var ttsLangInfo    = document.getElementById('ai-tts-lang-info');
+      var synth = window.speechSynthesis;
+      var utterance = null;
+      var isPlaying = false;
+      var isPaused = false;
+
+      function setPlayerState(state) {
+        if (state === 'playing') {
+          ttsIconPlay.style.display = 'none';
+          ttsIconPause.style.display = 'block';
+          ttsStatus.textContent = '\u25b6 Playing...';
+          ttsPlayBtn.style.transform = 'scale(1.05)';
+          ttsPlayBtn.style.boxShadow = '0 0 12px rgba(255,179,71,0.4)';
+        } else if (state === 'paused') {
+          ttsIconPlay.style.display = 'block';
+          ttsIconPause.style.display = 'none';
+          ttsStatus.textContent = '\u23f8 Paused';
+          ttsPlayBtn.style.transform = '';
+          ttsPlayBtn.style.boxShadow = '';
+        } else {
+          ttsIconPlay.style.display = 'block';
+          ttsIconPause.style.display = 'none';
+          ttsStatus.textContent = 'Ready to play';
+          ttsPlayBtn.style.transform = '';
+          ttsPlayBtn.style.boxShadow = '';
+        }
+      }
+
+      function stopTTS() {
+        if (synth) synth.cancel();
+        isPlaying = false;
+        isPaused = false;
+        setPlayerState('ready');
+      }
+
+      function startFreshTTS() {
+        synth.cancel();
+        var text = document.getElementById('ai-explain-result').textContent;
+        if (!text) return;
+        text = text.replace(/\{"summary":"/g, '').replace(/"\}$/g, '');
+
+        utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = selectedLang.code;
+        window._ttsUtterance = utterance;
+
+        utterance.onend = function() {
+            isPlaying = false;
+            isPaused = false;
+            setPlayerState('ready');
+        };
+        utterance.onerror = function(e) {
+            console.error('Speech synthesis error', e);
+            isPlaying = false;
+            isPaused = false;
+            setPlayerState('ready');
+        };
+
+        isPlaying = true;
+        isPaused = false;
+        setPlayerState('playing');
+        ttsLangInfo.textContent = selectedLang.native + ' \u00b7 ' + selectedLang.name;
+        synth.speak(utterance);
+      }
+
+      // Play / Pause toggle
+      ttsPlayBtn.addEventListener('click', function() {
+        if (!synth) { alert('Text-to-speech is not supported in your browser.'); return; }
+        if (isPlaying && !isPaused) {
+            synth.pause();
+            isPaused = true;
+            setPlayerState('paused');
+            return;
+        }
+        if (isPlaying && isPaused) {
+            synth.resume();
+            isPaused = false;
+            setPlayerState('playing');
+            return;
+        }
+        startFreshTTS();
+      });
+
+      // Restart
+      ttsRestartBtn.addEventListener('click', function() {
+        if (!synth) return;
+        startFreshTTS();
+      });
+
+      // Stop
+      ttsStopBtn.addEventListener('click', stopTTS);
+
+      function fetchExplanation(autoPlay, sourceBtn) {
+        if (sourceBtn) {
+            sourceBtn.disabled = true;
+            trigger.style.pointerEvents = 'none';
+            sourceBtn.querySelector('span').textContent = autoPlay ? 'Loading...' : 'Thinking\u2026';
+        }
+        if (autoPlay && btn) { btn.disabled = true; }
+        if (!autoPlay && directListenBtn) { directListenBtn.disabled = true; }
+        stopTTS();
 
         fetch('/api/ai-explain.php', {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -358,23 +487,55 @@ body.lang-modal-open{overflow:hidden!important}
           if (d.ok) {
             document.getElementById('ai-explain-result').textContent = d.summary || '';
             document.getElementById('ai-explain-lang-label').textContent = selectedLang.native + ' (' + selectedLang.name + ')';
-            document.getElementById('ai-explain-box').style.display = 'block';
-            document.getElementById('ai-explain-box').scrollIntoView({behavior:'smooth', block:'nearest'});
+            var explainBox = document.getElementById('ai-explain-box');
+            explainBox.style.display = 'block';
+            explainBox.setAttribute('data-current-lang', selectedLang.code);
+            audioPlayer.style.display = 'block';
+            ttsLangInfo.textContent = selectedLang.native + ' \u00b7 ' + selectedLang.name;
+            setPlayerState('ready');
+            explainBox.scrollIntoView({behavior:'smooth', block:'nearest'});
+
             btn.querySelector('span').textContent = 'Explain with AI';
             btn.disabled = false;
             trigger.style.pointerEvents = '';
+            if (directListenBtn) {
+                directListenBtn.disabled = false;
+                directListenBtn.querySelector('span').textContent = 'Listen to AI';
+            }
+            if (autoPlay) { setTimeout(startFreshTTS, 300); }
           } else {
-            btn.querySelector('span').textContent = 'Try again';
+            if (sourceBtn) { sourceBtn.querySelector('span').textContent = 'Try again'; sourceBtn.disabled = false; }
             btn.disabled = false;
+            if (directListenBtn) { directListenBtn.disabled = false; directListenBtn.querySelector('span').textContent = 'Listen to AI'; }
             trigger.style.pointerEvents = '';
             if (d.error === 'php_curl_missing') alert('Server needs php-curl: ' + (d.hint||''));
             else if (d.detail) console.warn('AI explain failed:', d.error, d.detail);
           }
         }).catch(function(){
-          btn.querySelector('span').textContent = 'Try again';
+          if (sourceBtn) { sourceBtn.querySelector('span').textContent = 'Try again'; sourceBtn.disabled = false; }
           btn.disabled = false;
+          if (directListenBtn) { directListenBtn.disabled = false; directListenBtn.querySelector('span').textContent = 'Listen to AI'; }
           trigger.style.pointerEvents = '';
         });
+      }
+
+      btn.addEventListener('click', function(){ fetchExplanation(false, btn); });
+
+      if (directListenBtn) {
+          directListenBtn.addEventListener('click', function() {
+              var box = document.getElementById('ai-explain-box');
+              var currentLang = box.getAttribute('data-current-lang');
+              var text = document.getElementById('ai-explain-result').textContent;
+              if (text && box.style.display === 'block' && currentLang === selectedLang.code) {
+                  startFreshTTS();
+              } else {
+                  fetchExplanation(true, directListenBtn);
+              }
+          });
+      }
+
+      document.addEventListener('visibilitychange', function() {
+         if (document.hidden) stopTTS();
       });
     })();
     </script>

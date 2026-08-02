@@ -274,6 +274,24 @@ async def job_generate_mains_hi() -> None:
         log.exception("[job] generate mains hi failed")
 
 
+async def job_generate_startup() -> None:
+    log.info("[job] generate startup started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("startup_ideas")
+    except Exception:
+        log.exception("[job] generate startup failed")
+
+
+async def job_generate_startup_hi() -> None:
+    log.info("[job] generate startup hi started")
+    try:
+        from src.services.student_service import generate_content
+        await generate_content("startup_ideas", language="hi")
+    except Exception:
+        log.exception("[job] generate startup hi failed")
+
+
 async def job_student_recovery() -> None:
     log.info("[job] student recovery started")
     try:
@@ -282,7 +300,7 @@ async def job_student_recovery() -> None:
         from src.services.student_service import generate_content, _generation_exists
         today = date.today()
         for lang in ["en", "hi"]:
-            for t in ["upsc_quiz", "media_quiz", "editorial", "mains"]:
+            for t in ["upsc_quiz", "media_quiz", "editorial", "mains", "startup_ideas"]:
                 if not _generation_exists(t, today, lang):
                     log.info("Recovery: generating missing {} lang={}", t, lang)
                     try:

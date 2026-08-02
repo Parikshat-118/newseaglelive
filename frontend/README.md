@@ -25,16 +25,24 @@ A massive draw for the platform. Displays daily, AI-generated educational conten
 ### 2. AI Semantic Search (`search.php`)
 Traditional SQL `LIKE` searches are limited to exact keyword matches. This frontend implements an advanced Semantic Search engine. It searches against hidden **AI Search Tags** (generated in the background by Groq AI during article ingestion), allowing users to find articles by concept, synonym, or theme—not just exact words.
 
-### 3. AI Article Summarization (`article.php`)
-Users can request on-demand, localized AI explanations of complex news articles via a direct API bridge to Groq's 70b models natively in the PHP application.
+### 3. AI Article Summarization & Modern Audio Player (`article.php`)
+Users can request on-demand, localized AI explanations of complex news articles via a direct API bridge to Groq's 70b models natively in the PHP application. 
+- Features a **Modern AI Audio Player** providing a podcast-like Text-to-Speech (TTS) experience.
+- Implements state management for Play/Pause/Restart logic and detects translation language changes dynamically.
 
-### 4. Severe Alerts Dashboard (`alerts.php`)
+### 4. Global Live Viewers
+A site-wide real-time counter showing active users on the platform.
+- Powered by a custom `site_live_viewers` MySQL table and a lightweight async background heartbeat (`api/live-viewers.php`).
+- Optimized with the Page Visibility API to pause polling when tabs are inactive, saving massive server bandwidth.
+- Beautiful UI in the global navigation bar (`includes/header.php`) with pulsing animations.
+
+### 5. Severe Alerts Dashboard (`alerts.php`)
 A live feed of AI-detected severe alerts (cyclones, terror threats, disease outbreaks) plotted and pushed directly from the bot's background threat-monitoring jobs.
 
-### 5. Engagement Analytics (`like.php`, `share.php`)
+### 6. Engagement Analytics (`like.php`, `share.php`)
 Direct database interaction via lightweight JS fetch calls to track `view_count`, `like_count`, and `share_count` on every article, which directly feeds into the Bot's trending algorithms.
 
-### 6. Admin Panel (`admin.php`)
+### 7. Admin Panel (`admin.php`)
 Secure portal for `is_admin=1` users to moderate user testimonials, manage severe alert active states, and view high-level platform statistics.
 
 ---

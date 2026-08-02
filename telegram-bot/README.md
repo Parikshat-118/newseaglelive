@@ -1,9 +1,11 @@
-# News Eagle Live — Complete Bot v2 (Fresh Install)
+# News Eagle Live — Complete Bot v2.2 (Fresh Install)
 
 **This is the FULL bot** — all original features PLUS:
 
 - 🌏 **Full Hindi Support (Student Hub)** — The AI generates localized UPSC Quizzes, Editorials, and Mains Practice seamlessly in both English and Hindi.
 - 🧠 **AI Semantic Search Indexing** — Every incoming news article is automatically tagged with 10-20 AI-generated concepts and synonyms to supercharge the PHP web-search engine.
+- 🎧 **Modern AI Audio Player** — Integrated into the web app frontend, providing a seamless podcast-like experience for localized AI explanations.
+- 🟢 **Global Live Viewers** — A site-wide real-time active users counter driven by a new lightweight API and `site_live_viewers` table.
 - ⚖️ **Multi-Key Round-Robin Load Balancing** — Deterministic round-robin cycling across multiple Groq API keys to infinitely scale token limits and guarantee zero downtime during API rate limits.
 - ⚡ **Dual-Lane AI Model Routing** — Dedicated `GROQ_QUIZ_API_KEY` routes complex quizzes to heavy models (e.g. 70b), while background tasks are routed to ultra-fast, cheap models (e.g. 8b) to save hundreds of thousands of tokens per day.
 - 🔐 **Web login (Telegram-OTP)** — `/setmobile`, `/webauth`, `/mymobile`. Bot generates a 6-digit code valid 3 minutes; user logs in on the website with mobile + code.

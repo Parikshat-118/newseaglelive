@@ -20,6 +20,7 @@ PROMPT_VER_UPSC_QUIZ    = "v1.2-upsc-quiz-20q"
 PROMPT_VER_MEDIA_QUIZ   = "v1.2-media-quiz-20q"
 PROMPT_VER_EDITORIAL    = "v1.1-editorial"
 PROMPT_VER_MAINS        = "v1.1-mains"
+PROMPT_VER_STARTUP      = "v1.1-startup"
 
 MAX_RETRIES             = 3
 BASE_BACKOFF_SEC        = 30  # Wait 30s, 60s, 120s
@@ -176,6 +177,26 @@ def _validate_mains(questions: list) -> tuple[bool, str]:
             return False, f"Mains Q{i+1} has fewer than 3 answer points"
     return True, ""
 
+def _validate_startup(ideas: list) -> tuple[bool, str]:
+    if not (5 <= len(ideas) <= 10):
+        return False, f"Expected 5-10 ideas, got {len(ideas)}"
+    seen_titles = set()
+    for i, idea in enumerate(ideas):
+        for field in ("title", "description", "category"):
+            if not idea.get(field):
+                return False, f"Idea {i+1} missing '{field}'"
+            if not isinstance(idea[field], str) or not idea[field].strip():
+                return False, f"Idea {i+1} field '{field}' is empty"
+        title = idea["title"].strip()
+        if title.lower() in seen_titles:
+            return False, f"Idea {i+1} has duplicate title '{title}'"
+        seen_titles.add(title.lower())
+        if len(title.split()) > 8:
+            return False, f"Idea {i+1} title exceeds 8 words"
+        if len(idea["description"]) < 10:
+            return False, f"Idea {i+1} description is too short"
+    return True, ""
+
 # ──────────────────────────────────────────────────────────────────
 # DB Insertions
 # ──────────────────────────────────────────────────────────────────
@@ -236,6 +257,24 @@ def _store_mains(gen_id: int, language: str, questions: list, d: date, article_i
             for aid in article_ids:
                 s.execute(text("INSERT IGNORE INTO mains_source_articles (mains_question_id, article_id) VALUES (:mi, :ai)"), {"mi": mq_id, "ai": aid})
     log.info("student: stored {} {} mains questions", language, len(questions[:2]))
+
+
+def _store_startup_ideas(gen_id: int, language: str, ideas: list, d: date, search_tags: str = "") -> None:
+    with session_scope() as s:
+        r = s.execute(text(
+            "INSERT INTO daily_startup_generations (generation_id, generation_date, language, search_tags) "
+            "VALUES (:g, :d, :lang, :tags)"
+        ), {"g": gen_id, "d": d, "lang": language, "tags": search_tags})
+        startup_id = r.lastrowid
+        for i, idea in enumerate(ideas):
+            s.execute(text(
+                "INSERT INTO startup_ideas (generation_id, title, description, category, display_order) "
+                "VALUES (:gid, :t, :desc, :cat, :o)"
+            ), {
+                "gid": startup_id, "t": idea["title"][:256], "desc": idea["description"][:2000],
+                "cat": idea.get("category", "")[:128], "o": i
+            })
+    log.info("student: stored {} startup ideas for language {}", len(ideas), language)
 
 # ──────────────────────────────────────────────────────────────────
 # Core generation with retry + exponential backoff
@@ -444,5 +483,42 @@ async def generate_content(content_type: str, target_date: date | None = None, l
         except AIProviderError as exc:
             _update_generation(gen_id, "FAILED", error=str(exc))
             log.error("student: Mains generation failed lang={} — {}", language, exc)
+
+    elif content_type == "startup_ideas":
+        gen_id = _create_generation(content_type, target_date, language, prov, model, PROMPT_VER_STARTUP)
+        _update_generation(gen_id, "RUNNING")
+        try:
+            data = await _generate_with_retry(
+                provider,
+                system=(
+                    "You are a visionary startup founder and product strategist. Return strict JSON only. "
+                    + gen_rules
+                ),
+                user=(
+                    f"From today's news digest below, generate EXACTLY 5 to 10 highly practical startup ideas.\n"
+                    f"Each idea must be directly inspired by a problem or opportunity mentioned in the news.\n\n"
+                    f"Rules:\n"
+                    f"- Exactly 5-10 ideas.\n"
+                    f"- Title must be 8 words or fewer.\n"
+                    f"- Description must be maximum 2 short sentences.\n"
+                    f"- No markdown, no numbering in titles.\n"
+                    f"- Output valid JSON only.\n\n"
+                    f"Language requirement: {gen_rules}\n\n"
+                    f"Generate 10–20 highly relevant search keywords. Return them as a comma-separated string. Do not prefix with '#'.\n\n"
+                    f'Return ONLY this JSON:\n'
+                    f'{{"search_tags":"...", "ideas": [{{"title":"...", "description":"...", "category":"..."}}]}}\n\n'
+                    f"News digest:\n{digest}"
+                ),
+                gen_id=gen_id,
+                validate_fn=lambda d: _validate_startup(d.get("ideas", [])),
+            )
+            meta = data.pop("__meta__", {})
+            raw = data.pop("__raw__", "")
+            _store_startup_ideas(gen_id, language, data["ideas"], target_date, data.get("search_tags", ""))
+            _update_generation(gen_id, "COMPLETED", meta, raw_response=raw)
+        except AIProviderError as exc:
+            _update_generation(gen_id, "FAILED", error=str(exc))
+            log.error("student: Startup generation failed lang={} — {}", language, exc)
+
     else:
         log.error("student: unknown content_type {}", content_type)

@@ -43,8 +43,9 @@ try {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+Devanagari:wght@500;700&display=swap" rel="stylesheet">
-<link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
@@ -173,6 +174,36 @@ main{flex:1}
 .avatar-pill .av{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700;font-size:11px}
 @media (max-width:1040px){.nav-search{display:none}.nav-search-mobile{display:inline-grid}}
 @media (max-width:820px){.nav-links{display:none}}
+
+/* ═══ GLOBAL LIVE VIEWERS ═══ */
+.live-viewers-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, #2ecc71 15%, transparent);
+  color: #2ecc71;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-right: 0.75rem;
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #2ecc71;
+  border-radius: 50%;
+  animation: pulse-green 2s infinite;
+}
+@keyframes pulse-green {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+}
+@media (max-width: 768px) {
+  .live-text { display: none; }
+  .live-viewers-badge { margin-right: 0.25rem; padding: 4px 8px; font-size: 0.8rem; }
+}
 
 /* ═══ BUTTONS / FORM ═══ */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:12px 18px;border-radius:8px;font-family:var(--ff-display);font-weight:600;font-size:var(--fs-base);transition:all var(--dur) var(--ease);border:1px solid transparent;cursor:pointer}
@@ -376,6 +407,9 @@ h1.article-h1{margin:0 0 1.25rem;font-family:var(--ff-display);font-size:var(--f
     <a href="<?= h($CONFIG['brand']['bot_url']) ?>" target="_blank" rel="noopener">Bot ↗</a>
   </nav>
   <div class="nav-actions">
+    <div id="global-live-badge" class="live-viewers-badge" style="display:none; transition: opacity 0.5s ease-in-out;">
+      <span class="live-dot"></span> <span id="global-live-count">1</span><span class="live-text">&nbsp;online now</span>
+    </div>
     <form class="nav-search" method="get" action="/search.php" role="search" aria-label="Global archive search">
       <input type="search" name="q" value="<?= h((string)($_GET['q'] ?? '')) ?>" placeholder="Search archive..." maxlength="100">
       <button type="submit" aria-label="Search archive">

@@ -141,6 +141,54 @@
       a.remove();
     }
   });
+
+  // ── Global Live Viewers Tracking ──────────────────────────────────────
+  var globalLiveBadge = document.getElementById('global-live-badge');
+  var globalLiveCountEl = document.getElementById('global-live-count');
+  
+  if (globalLiveBadge && globalLiveCountEl) {
+      var globalLiveInterval = null;
+
+      function pingGlobalLiveViewers() {
+          if (document.hidden) return; // Paused while tab is inactive
+          
+          fetch('/api/live-viewers.php', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({}) // no article_id, global tracking
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+              if (d.success) {
+                  if (globalLiveCountEl.textContent !== String(d.count)) {
+                      globalLiveCountEl.style.opacity = '0';
+                      setTimeout(function() {
+                          globalLiveCountEl.textContent = d.count;
+                          globalLiveCountEl.style.opacity = '1';
+                      }, 200);
+                  }
+                  if (globalLiveBadge.style.display === 'none') {
+                      globalLiveBadge.style.display = 'inline-flex';
+                      globalLiveBadge.style.opacity = '0';
+                      setTimeout(function() { globalLiveBadge.style.opacity = '1'; }, 50);
+                  }
+              }
+          })
+          .catch(function(e) { /* ignore silently, keep last known number */ });
+      }
+
+      // Initial ping and set interval
+      pingGlobalLiveViewers();
+      globalLiveInterval = setInterval(pingGlobalLiveViewers, 20000);
+
+      document.addEventListener('visibilitychange', function() {
+          if (!document.hidden) {
+              // Immediately ping when returning to tab
+              pingGlobalLiveViewers();
+          }
+      });
+  }
+
 })();
 </script>
 </body>

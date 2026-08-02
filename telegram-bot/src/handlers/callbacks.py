@@ -229,9 +229,12 @@ async def _cb_article(update, context, action, args):
                 pass
 
         try:
-            await chat.send_message(text, parse_mode=ParseMode.MARKDOWN)
+            title_escaped = escape_md(article.title)
+            final_text = f"📰 *{title_escaped}*\n\n{text}"
+            await chat.send_message(final_text, parse_mode=ParseMode.MARKDOWN)
         except Exception:
-            await chat.send_message(text)
+            final_text = f"📰 {article.title}\n\n{text}"
+            await chat.send_message(final_text)
         return
 
     if action == "bm" and db_uid:
