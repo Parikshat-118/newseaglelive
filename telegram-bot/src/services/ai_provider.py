@@ -69,7 +69,8 @@ class GroqProvider(BaseAIProvider):
     _DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
     def __init__(self, api_key: str, model: str = "") -> None:
-        self._api_key = api_key
+        self._api_keys = [k.strip() for k in api_key.split(",") if k.strip()]
+        self._key_index = 0
         self._model   = model or self._DEFAULT_MODEL
         self._timeout = float(os.environ.get("AI_REQUEST_TIMEOUT", "60"))
 
@@ -87,8 +88,13 @@ class GroqProvider(BaseAIProvider):
         user: str,
         temperature: float = 0.4,
     ) -> dict[str, Any]:
+        
+        # Round-robin selection ensures retries always use a different key
+        selected_key = self._api_keys[self._key_index]
+        self._key_index = (self._key_index + 1) % len(self._api_keys)
+        
         headers = {
-            "Authorization": f"Bearer {self._api_key}",
+            "Authorization": f"Bearer {selected_key}",
             "Content-Type":  "application/json",
         }
         payload = {
@@ -212,19 +218,28 @@ class OpenRouterProvider(BaseAIProvider):
 # Factory — reads AI_PROVIDER and AI_MODEL from environment
 # ──────────────────────────────────────────────────────────────────────────────
 
-def get_ai_provider() -> BaseAIProvider:
+def get_ai_provider(model_override: str = "", purpose: str = "default") -> BaseAIProvider:
     """
     Instantiate and return the configured AI provider.
 
     .env keys:
         AI_PROVIDER  — groq (default) | openrouter
         AI_MODEL     — provider-specific model string
+        GROQ_QUIZ_API_KEY — dedicated keys for student hub
     """
     provider_name = os.environ.get("AI_PROVIDER", "groq").lower()
-    model         = os.environ.get("AI_MODEL", "")
+    
+    # Use override if provided, else use .env, else fallback to empty
+    model = model_override if model_override else os.environ.get("AI_MODEL", "")
 
     if provider_name == "groq":
-        api_key = os.environ.get("GROQ_API_KEY", "")
+        # Route to dedicated quiz keys if requested and available
+        quiz_api_key = os.environ.get("GROQ_QUIZ_API_KEY", "")
+        if purpose == "quiz" and quiz_api_key:
+            api_key = quiz_api_key
+        else:
+            api_key = os.environ.get("GROQ_API_KEY", "")
+
         if not api_key:
             raise RuntimeError(
                 "GROQ_API_KEY is not set in .env. "

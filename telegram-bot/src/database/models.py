@@ -128,6 +128,7 @@ class NewsArticle(Base):
     source_name:  Mapped[Optional[str]] = mapped_column(String(128))
     is_breaking:  Mapped[bool] = mapped_column(Boolean, default=False)
     trending_score: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    search_tags:  Mapped[Optional[str]] = mapped_column(Text)
     view_count:   Mapped[int]  = mapped_column(Integer, default=0)
     like_count:   Mapped[int]  = mapped_column(Integer, default=0)
     share_count:  Mapped[int]  = mapped_column(Integer, default=0)
@@ -284,6 +285,8 @@ class DailyQuiz(Base):
     generation_id : Mapped[int]      = mapped_column(ForeignKey("ai_generations.id", ondelete="CASCADE"), nullable=False)
     exam_type     : Mapped[str]      = mapped_column(SAEnum("upsc", "media", name="exam_type_enum"), nullable=False)
     quiz_date     : Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    language      : Mapped[str]      = mapped_column(SAEnum("en", "hi", name="lang_enum"), default="en")
+    search_tags   : Mapped[Optional[str]] = mapped_column(Text)
     title         : Mapped[str]      = mapped_column(String(512), nullable=False)
     created_at    : Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     questions     : Mapped[List["QuizQuestion"]] = relationship(back_populates="quiz", order_by="QuizQuestion.order_no", cascade="all, delete-orphan")
@@ -331,6 +334,8 @@ class DailyEditorial(Base):
     id              : Mapped[int]      = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     generation_id   : Mapped[int]      = mapped_column(ForeignKey("ai_generations.id", ondelete="CASCADE"), nullable=False)
     editorial_date  : Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    language        : Mapped[str]      = mapped_column(SAEnum("en", "hi", name="lang_enum"), default="en")
+    search_tags     : Mapped[Optional[str]] = mapped_column(Text)
     title           : Mapped[str]      = mapped_column(String(512), nullable=False)
     background      : Mapped[str]      = mapped_column(Text, nullable=False)
     exam_relevance  : Mapped[str]      = mapped_column(Text, nullable=False)
@@ -354,6 +359,8 @@ class DailyMainsQuestion(Base):
     id              : Mapped[int]      = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     generation_id   : Mapped[int]      = mapped_column(ForeignKey("ai_generations.id", ondelete="CASCADE"), nullable=False)
     mains_date      : Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    language        : Mapped[str]      = mapped_column(SAEnum("en", "hi", name="lang_enum"), default="en")
+    search_tags     : Mapped[Optional[str]] = mapped_column(Text)
     question        : Mapped[str]      = mapped_column(Text, nullable=False)
     paper           : Mapped[str]      = mapped_column(String(32), nullable=False, default="GS-2")
     hint            : Mapped[Optional[str]] = mapped_column(Text)
@@ -369,3 +376,29 @@ class MainsAnswerPoint(Base):
     content             : Mapped[str]                  = mapped_column(Text, nullable=False)
     order_no            : Mapped[int]                  = mapped_column(Integer, default=0)
     question            : Mapped["DailyMainsQuestion"] = relationship(back_populates="answer_points")
+
+
+class DailyStartupGeneration(Base):
+    __tablename__ = "daily_startup_generations"
+    __table_args__ = (
+        UniqueConstraint("generation_date", "language", name="uq_startup_date_lang"),
+    )
+    id              : Mapped[int]      = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    generation_id   : Mapped[int]      = mapped_column(ForeignKey("ai_generations.id", ondelete="CASCADE"), nullable=False)
+    generation_date : Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    language        : Mapped[str]      = mapped_column(SAEnum("en", "hi", name="lang_enum"), default="en")
+    search_tags     : Mapped[Optional[str]] = mapped_column(Text)
+    created_at      : Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    ideas           : Mapped[List["StartupIdea"]] = relationship(back_populates="generation", order_by="StartupIdea.display_order", cascade="all, delete-orphan")
+
+
+class StartupIdea(Base):
+    __tablename__ = "startup_ideas"
+    id              : Mapped[int]                    = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    generation_id   : Mapped[int]                    = mapped_column(ForeignKey("daily_startup_generations.id", ondelete="CASCADE"), nullable=False, index=True)
+    title           : Mapped[str]                    = mapped_column(String(256), nullable=False)
+    description     : Mapped[str]                    = mapped_column(Text, nullable=False)
+    category        : Mapped[Optional[str]]          = mapped_column(String(128))
+    display_order   : Mapped[int]                    = mapped_column(Integer, default=0)
+    created_at      : Mapped[datetime]               = mapped_column(DateTime, server_default=func.now())
+    generation      : Mapped["DailyStartupGeneration"] = relationship(back_populates="ideas")

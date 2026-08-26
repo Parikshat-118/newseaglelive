@@ -131,13 +131,13 @@ try {
         . "5. **What to Watch Next** — What could happen next? What are the future implications "
         . "or upcoming events related to this story?\n\n"
         . "Be detailed and thorough. Aim for at least 300 words of substantive analysis.\n\n"
-        . "Reply with ONLY valid JSON, no markdown fences, exactly:\n"
-        . '{"summary":"<your detailed explanation in ' . $targetLangName . '>"}'
-        . "\n\nARTICLE:\n" . $newsText;
+        . "Respond directly with the text in {$targetLangName}. Do not wrap your response in any JSON or markdown blocks.\n\n"
+        . "ARTICLE:\n" . $newsText;
 
     $models = [
-        $CONFIG['openrouter']['model'] ?? 'x-ai/grok-4.3',
-        'x-ai/grok-4',
+        $CONFIG['openrouter']['model'] ?? 'meta-llama/llama-3.1-70b-instruct',
+        'meta-llama/llama-3.1-70b-instruct',
+        'meta-llama/llama-3.1-8b-instruct',
     ];
 
     $summary = ''; $lastErr = '';
@@ -145,7 +145,7 @@ try {
         $payload = json_encode([
             'model' => $model,
             'messages' => [
-                ['role'=>'system','content'=>'You are a multilingual news analyst. You output only raw JSON. Never use markdown fences. Always respond in the language requested by the user. Provide thorough, detailed analysis.'],
+                ['role'=>'system','content'=>'You are a multilingual news analyst. Always respond directly in the language requested by the user. Provide thorough, detailed analysis.'],
                 ['role'=>'user','content'=>$userPrompt],
             ],
             'temperature' => 0.3,
@@ -175,26 +175,11 @@ try {
         if ($http !== 200)   { $lastErr = 'http_' . $http . ': ' . mb_substr((string)$resp, 0, 200); continue; }
 
         $data = json_decode($resp, true);
-        $content = $data['choices'][0]['message']['content'] ?? '';
+        $content = trim((string)($data['choices'][0]['message']['content'] ?? ''));
         if ($content === '') { $lastErr = 'empty_ai_content'; continue; }
 
-        // Strip fences if model added them anyway, then locate the JSON object
-        $content = preg_replace('/```(json)?/i', '', $content);
-        $start = strpos($content, '{');
-        $end = strrpos($content, '}');
-        if ($start !== false && $end !== false && $end > $start) {
-            $content = substr($content, $start, $end - $start + 1);
-        }
-        $parsed = json_decode(trim($content), true);
-        if (is_array($parsed)) {
-            $summary = trim((string)($parsed['summary'] ?? ''));
-        }
-        // Last-resort: use raw text as summary
-        if ($summary === '' && mb_strlen(trim($content)) > 40) {
-            $summary = trim(strip_tags($content));
-        }
-        if ($summary !== '') break;
-        $lastErr = 'parse_failed';
+        $summary = $content;
+        break;
     }
 
     if ($summary === '') {

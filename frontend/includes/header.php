@@ -43,8 +43,9 @@ try {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+Devanagari:wght@500;700&display=swap" rel="stylesheet">
-<link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
@@ -156,6 +157,12 @@ main{flex:1}
 .nav-links{display:flex;align-items:center;gap:1.25rem;margin-left:auto;font-size:var(--fs-sm)}
 .nav-links a{color:var(--text-soft)}.nav-links a:hover,.nav-links a.active{color:var(--text)}
 .nav-actions{display:flex;align-items:center;gap:.5rem}
+.nav-search{display:flex;align-items:center;gap:.35rem;height:38px;padding:0 .45rem 0 .7rem;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.nav-search input{width:180px;background:transparent;border:none;outline:none;color:var(--text);font-size:var(--fs-sm)}
+.nav-search input::placeholder{color:var(--muted)}
+.nav-search button{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;color:var(--text-soft)}
+.nav-search button:hover{color:var(--accent)}
+.nav-search-mobile{display:none}
 .icon-btn{display:inline-grid;place-items:center;width:38px;height:38px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);transition:all var(--dur) var(--ease)}
 .icon-btn:hover{color:var(--accent);border-color:var(--accent)}
 .icon-btn svg{width:18px;height:18px}
@@ -165,7 +172,38 @@ main{flex:1}
 .cta-mini:hover{background:var(--text);color:var(--bg)}
 .avatar-pill{display:inline-flex;align-items:center;gap:.5rem;height:38px;padding:0 .75rem 0 .5rem;background:var(--surface);border:1px solid var(--border);border-radius:999px;font-size:var(--fs-sm)}
 .avatar-pill .av{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700;font-size:11px}
+@media (max-width:1040px){.nav-search{display:none}.nav-search-mobile{display:inline-grid}}
 @media (max-width:820px){.nav-links{display:none}}
+
+/* ═══ GLOBAL LIVE VIEWERS ═══ */
+.live-viewers-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, #2ecc71 15%, transparent);
+  color: #2ecc71;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-right: 0.75rem;
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #2ecc71;
+  border-radius: 50%;
+  animation: pulse-green 2s infinite;
+}
+@keyframes pulse-green {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+}
+@media (max-width: 768px) {
+  .live-text { display: none; }
+  .live-viewers-badge { margin-right: 0.25rem; padding: 4px 8px; font-size: 0.8rem; }
+}
 
 /* ═══ BUTTONS / FORM ═══ */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:12px 18px;border-radius:8px;font-family:var(--ff-display);font-weight:600;font-size:var(--fs-base);transition:all var(--dur) var(--ease);border:1px solid transparent;cursor:pointer}
@@ -369,9 +407,21 @@ h1.article-h1{margin:0 0 1.25rem;font-family:var(--ff-display);font-size:var(--f
     <a href="<?= h($CONFIG['brand']['bot_url']) ?>" target="_blank" rel="noopener">Bot ↗</a>
   </nav>
   <div class="nav-actions">
+    <div id="global-live-badge" class="live-viewers-badge" style="display:none; transition: opacity 0.5s ease-in-out;">
+      <span class="live-dot"></span> <span id="global-live-count">1</span><span class="live-text">&nbsp;online now</span>
+    </div>
+    <form class="nav-search" method="get" action="/search.php" role="search" aria-label="Global archive search">
+      <input type="search" name="q" value="<?= h((string)($_GET['q'] ?? '')) ?>" placeholder="Search archive..." maxlength="100">
+      <button type="submit" aria-label="Search archive">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+      </button>
+    </form>
     <button class="nav-burger" type="button" aria-label="Open menu" onclick="document.getElementById('mmenu').classList.add('open')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
     </button>
+    <a class="icon-btn nav-search-mobile" href="/search.php" aria-label="Open archive search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+    </a>
     <button class="icon-btn theme-toggle" type="button" aria-label="Toggle light/dark mode">
       <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
       <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -395,6 +445,7 @@ h1.article-h1{margin:0 0 1.25rem;font-family:var(--ff-display);font-size:var(--f
   </div>
   <a class="mlink" href="/">🏠 Home</a>
   <a class="mlink" href="/news.php">📰 News</a>
+  <a class="mlink" href="/search.php">🔎 Search Archive</a>
   <a class="mlink" href="/warmeter.php">⚔️ War Meter</a>
   <a class="mlink" href="/videos.php">🎥 Videos</a>
   <a class="mlink" href="/students.php">🎓 Student Hub</a>
